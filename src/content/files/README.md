@@ -1,6 +1,6 @@
 # jason edman
 
-You have reached a portfolio that thinks it is a terminal.
+You have reached my personal IDE.
 
 Navigate with the file explorer. Everything here is a file — prose is
 markdown, structured data is JSON, history is a log.
