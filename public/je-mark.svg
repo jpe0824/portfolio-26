@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 48" width="120" height="48">
+  <rect width="120" height="48" fill="#080E15"/>
+  <text x="60" y="33" text-anchor="middle"
+        font-family="ui-monospace, SFMono-Regular, monospace"
+        font-size="28" font-weight="700">
+    <tspan fill="#E7ECF2">J</tspan><tspan fill="#1E90FF">{</tspan><tspan fill="#E7ECF2">E</tspan><tspan fill="#1E90FF">}</tspan>
+  </text>
+</svg>
