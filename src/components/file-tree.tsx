@@ -29,6 +29,7 @@ export function FileTree({
                 aria-current={active ? "page" : undefined}
                 className={`${ROW} ${active ? "bg-primary-dim text-fg" : "text-fg-muted"}`}
               >
+                <span className="inline-block w-3 shrink-0" aria-hidden="true" />
                 <FileIcon name={node.name} />
                 <span className="truncate">{node.name}</span>
               </Link>
@@ -38,17 +39,21 @@ export function FileTree({
 
         return (
           <li key={node.path}>
-            <details open={isAncestor(node.path, currentPath)}>
+            <details className="group" open={isAncestor(node.path, currentPath)}>
               <summary className={`${ROW} cursor-pointer list-none text-fg-muted marker:content-none`}>
+                <span
+                  className="inline-block w-3 shrink-0 text-center text-fg-subtle transition-transform group-open:rotate-90"
+                  aria-hidden="true"
+                >
+                  ▸
+                </span>
                 <FileIcon name={node.name} isDir />
                 <span className="truncate">{node.name}/</span>
               </summary>
               {node.children.length > 0 ? (
                 <FileTree nodes={node.children} currentPath={currentPath} depth={depth + 1} />
               ) : (
-                <p className="pl-8 text-fg-subtle" aria-hidden="true">
-                  (empty)
-                </p>
+                <p className="pl-11 text-fg-muted">(empty)</p>
               )}
             </details>
           </li>
