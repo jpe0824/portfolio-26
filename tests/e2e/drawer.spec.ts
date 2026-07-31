@@ -2,8 +2,11 @@ import { expect, test } from "@playwright/test";
 
 test.use({ viewport: { width: 375, height: 812 } });
 
-const toggle = (page: import("@playwright/test").Page) =>
-  page.getByRole("group").filter({ hasText: "~/portfolio-26" }).locator("summary");
+// Target the drawer's own summary by its aria-label. Do NOT use
+// getByRole("group").locator("summary") — the drawer's <details> contains the tree's nested
+// folder <details>, which are also role=group with their own <summary>, so that locator
+// matches several elements and fails Playwright strict mode.
+const toggle = (page: import("@playwright/test").Page) => page.getByLabel("Toggle file explorer");
 
 test("the desktop explorer pane is hidden on mobile", async ({ page }) => {
   await page.goto("/");
