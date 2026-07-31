@@ -5,7 +5,7 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   reporter: "list",
-  use: { baseURL: "http://localhost:3000" },
+  use: { baseURL: "http://localhost:3211" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
     { name: "mobile", use: { ...devices["Pixel 7"] } },
@@ -16,9 +16,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "pnpm build && pnpm start",
-    url: "http://localhost:3000",
-    reuseExistingServer: !process.env.CI,
+    command: "pnpm build && pnpm exec next start -p 3211",
+    url: "http://localhost:3211",
+    reuseExistingServer: false,
     timeout: 180_000,
   },
 });
