@@ -1,5 +1,5 @@
 # portfolio-26
-Personal dev portfolio build, 2026 — "JSON Code", a terminal-emulator portfolio.
+Personal dev portfolio build, 2026 — "jason edman", a terminal-emulator portfolio.
 
 ## Stack
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS v4 · pnpm

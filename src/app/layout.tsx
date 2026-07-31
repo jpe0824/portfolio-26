@@ -9,7 +9,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JSON Code",
+  title: "jason edman",
   description: "Jason Edman — portfolio, served as a terminal session.",
 };
 

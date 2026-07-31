@@ -6,7 +6,7 @@ export function StatusBar() {
     >
       <span className="text-primary">portfolio-26</span>
       <span>main</span>
-      <span className="ml-auto">json-code v0.1</span>
+      <span className="ml-auto">jason-edman v0.1</span>
     </div>
   );
 }
