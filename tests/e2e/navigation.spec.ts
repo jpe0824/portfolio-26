@@ -26,7 +26,7 @@ test("renders an image file", async ({ page }) => {
 
 test("renders a directory listing", async ({ page }) => {
   await page.goto("/assets");
-  await expect(page.getByRole("link", { name: "je-mark.svg" }).first()).toBeVisible();
+  await expect(page.getByRole("main").getByRole("link", { name: "je-mark.svg" })).toBeVisible();
 });
 
 test("shows a terminal 404 for an unknown path", async ({ page }) => {
