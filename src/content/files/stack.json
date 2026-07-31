@@ -1,0 +1,10 @@
+{
+  "runtime": ["Next.js 16", "React 19", "TypeScript"],
+  "styling": ["Tailwind CSS v4"],
+  "testing": ["Vitest", "Playwright"],
+  "hosting": "Vercel",
+  "planned": {
+    "model": "local, on Proxmox",
+    "transport": "undecided"
+  }
+}
