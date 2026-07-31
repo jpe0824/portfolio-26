@@ -34,7 +34,6 @@ export const manifest: ContentNode[] = [
     ],
   },
   { kind: "file", name: "stack.json", path: "stack", source: "stack.json", title: "stack" },
-  { kind: "dir", name: "writing", path: "writing", title: "writing", children: [] },
   { kind: "file", name: "contact.json", path: "contact", source: "contact.json", title: "contact" },
   {
     kind: "dir",
