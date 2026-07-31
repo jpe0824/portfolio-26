@@ -7,7 +7,7 @@ export function DirectoryListing({ node }: { node: DirNode }) {
     return (
       <div className="p-4 text-fg-muted">
         <p>{node.name}/ is empty.</p>
-        <p className="mt-2 text-fg-subtle">Nothing written here yet.</p>
+        <p className="mt-2 text-fg-muted">Nothing written here yet.</p>
       </div>
     );
   }

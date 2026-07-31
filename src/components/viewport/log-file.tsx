@@ -9,7 +9,7 @@ export function LogFile({ source }: { source: string }) {
           const { timestamp, level, message } = parseLogLine(line);
           return (
             <LineRow key={i} n={i + 1}>
-              {timestamp && <span className="text-fg-subtle">[{timestamp}] </span>}
+              {timestamp && <span className="text-fg-muted">[{timestamp}] </span>}
               {level && <span className="text-green">{level} </span>}
               <span className="text-fg">{message}</span>
             </LineRow>

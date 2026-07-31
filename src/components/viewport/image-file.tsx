@@ -7,7 +7,7 @@ export function ImageFile({ name, source }: { name: string; source: string }) {
         alt={name}
         className="max-w-full border border-edge bg-elevated"
       />
-      <p className="mt-2 text-fg-subtle">{name}</p>
+      <p className="mt-2 text-fg-muted">{name}</p>
     </div>
   );
 }
