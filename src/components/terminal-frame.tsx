@@ -2,6 +2,7 @@ import { PathLine } from "./path-line";
 import { StatusBar } from "./status-bar";
 import { ChipRow } from "./chip-row";
 import { TopBar } from "./top-bar";
+import { MobileNavDrawer } from "./mobile-nav-drawer";
 
 export function TerminalFrame({
   explorer,
@@ -21,6 +22,7 @@ export function TerminalFrame({
         Skip to content
       </a>
       <TopBar />
+      <MobileNavDrawer currentPath={currentPath} />
       <div className="flex min-h-0 flex-1">
         {explorer}
         <main id="file-content" className="flex min-w-0 flex-1 flex-col">
