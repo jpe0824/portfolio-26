@@ -58,3 +58,33 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* A CSS counter numbers each top-level block, which is how the gutter aligns
+   with rendered prose (per-visual-line numbering is not achievable in CSS
+   when text wraps). */
+.markdown-body {
+  counter-reset: block;
+}
+.markdown-body > * {
+  counter-increment: block;
+  position: relative;
+  padding-left: 3.5rem;
+}
+.markdown-body > *::before {
+  content: counter(block);
+  position: absolute;
+  left: 0;
+  width: 2.5rem;
+  text-align: right;
+  color: var(--color-fg-subtle);
+  user-select: none;
+}
+.markdown-body h1 { font-size: 1.5rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+.markdown-body h2 { font-size: 1.2rem; font-weight: 700; color: var(--color-primary); margin: 1.25rem 0 0.5rem; }
+.markdown-body p { margin: 0.5rem 0; }
+.markdown-body a { color: var(--color-primary); text-decoration: underline; }
+.markdown-body a:hover { color: var(--color-primary-hi); }
+.markdown-body code { color: var(--color-amber); }
+.markdown-body ul { list-style: none; margin: 0.5rem 0; }
+.markdown-body li::marker { content: none; }
+.markdown-body ul > li::after { content: ""; }
