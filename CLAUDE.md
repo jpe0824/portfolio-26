@@ -122,6 +122,26 @@ Domain: **`jsonedman.dev`**, registered 2026-07-31 via Name.com with nameservers
 `ns1/ns2.vercel-dns.com`. `.dev` is HSTS-preloaded, so HTTPS is mandatory; Vercel handles the
 certificate.
 
+**Live URLs** (deployed 2026-07-31):
+- Production: https://jsonedman.dev
+- Vercel alias: https://portfolio-26-jason-personal-f16e1530.vercel.app (production deployment; the
+  raw `*.vercel.app` alias sits behind Vercel's Standard/SSO Protection team default — the custom
+  domain is the actual public, shareable link)
+
+## ⚠️ Temporary: search indexing is disabled
+
+`src/app/layout.tsx` sets `robots: { index: false, follow: false }`. This is deliberate — the site is
+live and shareable, but content is still placeholder, and placeholder copy should not be cached against
+a real person's name. **Remove it when real content lands.** Deployment Protection is intentionally
+off; `noindex` is the only thing holding this back.
+
+Correction found during the 2026-07-31 deploy: the project's actual protection setting is
+`ssoProtection: all_except_custom_domains` (a `jason-personal` team default for new projects), not a
+blanket "off." This means the raw `*.vercel.app` alias requires Vercel SSO login, while the custom
+domain `jsonedman.dev` — the link that actually gets shared — is fully public. If the `*.vercel.app`
+alias also needs to be public, disable SSO Protection explicitly: `vercel project protection disable
+portfolio-26 --sso --scope jason-personal-f16e1530`. Left untouched here pending owner decision.
+
 ## Phases
 
 1. **Terminal shell** — done

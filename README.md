@@ -14,6 +14,12 @@ pnpm test         # vitest unit tests
 pnpm test:e2e     # playwright acceptance tests
 ```
 
+## Deployment
+- Production: https://jsonedman.dev
+- Vercel alias: https://portfolio-26-jason-personal-f16e1530.vercel.app
+- Deployed via Vercel's GitHub integration — pushing to `main` triggers the production build.
+- **Not indexed** — placeholder content, see `CLAUDE.md`.
+
 ## Documentation
 - `CLAUDE.md` — repo conventions and constraints
 - `AGENTS.md` — Next.js framework idiom (upstream, do not hand-edit)
