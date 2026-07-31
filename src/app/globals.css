@@ -1,1 +1,60 @@
 @import "tailwindcss";
+
+@theme {
+  --color-base: oklch(16% 0.018 253.2);
+  --color-panel: oklch(20.5% 0.020 253.2);
+  --color-elevated: oklch(25% 0.022 253.2);
+  --color-edge: oklch(32% 0.024 253.2);
+  --color-edge-strong: oklch(42% 0.028 253.2);
+
+  --color-fg: oklch(94% 0.010 253.2);
+  --color-fg-muted: oklch(76% 0.014 253.2);
+  --color-fg-subtle: oklch(60% 0.016 253.2);
+
+  --color-primary: oklch(65.2% 0.190 253.2);
+  --color-primary-hi: oklch(74% 0.130 253.2);
+  --color-primary-dim: oklch(30% 0.075 253.2);
+
+  --color-cyan: oklch(79% 0.115 205);
+  --color-violet: oklch(72% 0.150 300);
+  --color-green: oklch(78% 0.155 152);
+  --color-amber: oklch(82% 0.140 85);
+  --color-red: oklch(68% 0.185 22);
+
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  /* Full-viewport TUI: the page itself never scrolls. */
+  overflow: hidden;
+  background-color: var(--color-base);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary-hi);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
