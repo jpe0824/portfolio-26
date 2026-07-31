@@ -7,8 +7,12 @@ export default defineConfig({
   reporter: "list",
   use: { baseURL: "http://localhost:3211" },
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } } },
-    { name: "mobile", use: { ...devices["Pixel 7"] } },
+    {
+      name: "desktop",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+      testIgnore: /no-js\.spec\.ts/,
+    },
+    { name: "mobile", use: { ...devices["Pixel 7"] }, testIgnore: /no-js\.spec\.ts/ },
     {
       name: "no-js",
       use: { ...devices["Desktop Chrome"], javaScriptEnabled: false },
