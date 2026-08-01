@@ -3,7 +3,7 @@ import { allFiles, allPaths, resolveNode } from "@/content/resolve";
 import type { ContentNode } from "@/content/manifest";
 
 const fixture: ContentNode[] = [
-  { kind: "file", name: "README.md", path: "", source: "README.md", title: "README" },
+  { kind: "file", name: "README.md", path: "readme", source: "README.md", title: "README" },
   { kind: "file", name: "whoami.md", path: "whoami", source: "whoami.md", title: "whoami" },
   {
     kind: "dir",
@@ -17,8 +17,12 @@ const fixture: ContentNode[] = [
 ];
 
 describe("resolveNode", () => {
-  it("resolves the root to the empty-path file", () => {
-    expect(resolveNode(fixture, [])?.name).toBe("README.md");
+  it("returns null for the root, which is no longer a content node", () => {
+    expect(resolveNode(fixture, [])).toBeNull();
+  });
+
+  it("resolves README at its own path", () => {
+    expect(resolveNode(fixture, ["readme"])?.name).toBe("README.md");
   });
 
   it("resolves a top-level file", () => {
@@ -45,7 +49,7 @@ describe("resolveNode", () => {
 
 describe("allPaths", () => {
   it("includes every file and directory path", () => {
-    expect(allPaths(fixture).sort()).toEqual(["", "projects", "projects/alpha", "whoami"]);
+    expect(allPaths(fixture).sort()).toEqual(["projects", "projects/alpha", "readme", "whoami"]);
   });
 });
 

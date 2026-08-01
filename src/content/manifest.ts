@@ -20,7 +20,7 @@ export type DirNode = {
 export type ContentNode = FileNode | DirNode;
 
 export const manifest: ContentNode[] = [
-  { kind: "file", name: "README.md", path: "", source: "README.md", title: "README" },
+  { kind: "file", name: "README.md", path: "readme", source: "README.md", title: "README" },
   { kind: "file", name: "whoami.md", path: "whoami", source: "whoami.md", title: "whoami" },
   { kind: "file", name: "experience.log", path: "experience", source: "experience.log", title: "experience" },
   {
