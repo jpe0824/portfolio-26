@@ -29,6 +29,14 @@ function ctx(cwd = ""): CommandContext {
 const text = (result: Awaited<ReturnType<typeof runCommand>>) =>
   result.kind === "output" ? result.lines.map((l) => l.text) : [];
 
+// Unlike text(), this keeps `tone` in the returned lines so tests can pin it —
+// text() strips tone from every assertion in this file, so nothing else here
+// would notice tone/text getting out of sync.
+function lines(result: Awaited<ReturnType<typeof runCommand>>) {
+  if (result.kind !== "output") throw new Error(`expected an output result, got ${result.kind}`);
+  return result.lines;
+}
+
 describe("runCommand", () => {
   it("returns no output for empty input", async () => {
     expect(text(await runCommand("   ", ctx()))).toEqual([]);
@@ -36,6 +44,13 @@ describe("runCommand", () => {
 
   it("ls lists the root", async () => {
     expect(text(await runCommand("ls", ctx()))).toEqual(["whoami.md", "projects/"]);
+  });
+
+  it("ls tags directories with accent tone and leaves files untoned", async () => {
+    expect(lines(await runCommand("ls", ctx()))).toEqual([
+      { text: "whoami.md" },
+      { text: "projects/", tone: "accent" },
+    ]);
   });
 
   it("ls lists a named directory", async () => {
@@ -52,6 +67,12 @@ describe("runCommand", () => {
     ]);
   });
 
+  it("ls error output carries error tone", async () => {
+    expect(lines(await runCommand("ls nope", ctx()))).toEqual([
+      { text: "ls: no such file or directory: nope", tone: "error" },
+    ]);
+  });
+
   it("cd returns a new cwd without navigating", async () => {
     expect(await runCommand("cd projects", ctx())).toEqual({ kind: "cwd", cwd: "projects" });
   });
@@ -61,7 +82,15 @@ describe("runCommand", () => {
   });
 
   it("cd refuses a file", async () => {
-    expect(text(await runCommand("cd whoami.md", ctx()))).toEqual(["cd: not a directory: whoami.md"]);
+    // The route-path form ("whoami", no extension) is what resolveNode actually
+    // matches against a manifest FileNode — this hits the "found a file, reject
+    // it" branch. The extension form ("whoami.md") never resolves at all, which
+    // would exercise the missing-path branch below instead, for the wrong reason.
+    expect(text(await runCommand("cd whoami", ctx()))).toEqual(["cd: not a directory: whoami"]);
+  });
+
+  it("cd reports a missing path", async () => {
+    expect(text(await runCommand("cd nope", ctx()))).toEqual(["cd: not a directory: nope"]);
   });
 
   it("pwd prints the display path", async () => {
@@ -82,6 +111,10 @@ describe("runCommand", () => {
     ]);
   });
 
+  it("open with no argument reports a missing operand", async () => {
+    expect(text(await runCommand("open", ctx()))).toEqual(["open: missing operand"]);
+  });
+
   it("close navigates to the root", async () => {
     expect(await runCommand("close", ctx())).toEqual({ kind: "navigate", path: "/" });
   });
@@ -98,6 +131,14 @@ describe("runCommand", () => {
     ]);
   });
 
+  it("tree preserves tone at depth", async () => {
+    expect(lines(await runCommand("tree", ctx()))).toEqual([
+      { text: "whoami.md" },
+      { text: "projects/", tone: "accent" },
+      { text: "  1kout.md" },
+    ]);
+  });
+
   it("help lists every registered command", async () => {
     const lines = text(await runCommand("help", ctx()));
     const listed = lines.map((l) => l.split(/\s{2,}/)[0]);
@@ -107,5 +148,9 @@ describe("runCommand", () => {
   it("routes unrecognized input to the model stub", async () => {
     expect(text(await runCommand("tell me about your homelab", ctx()))).toEqual([UNKNOWN_INPUT]);
     expect(text(await runCommand("sl", ctx()))).toEqual([UNKNOWN_INPUT]);
+  });
+
+  it("unknown input line carries dim tone", async () => {
+    expect(lines(await runCommand("sl", ctx()))).toEqual([{ text: UNKNOWN_INPUT, tone: "dim" }]);
   });
 });

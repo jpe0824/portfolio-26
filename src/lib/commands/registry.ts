@@ -32,7 +32,8 @@ export function displayPath(cwd: string): string {
 function drawTree(nodes: ContentNode[], depth = 0): OutputLine[] {
   const lines: OutputLine[] = [];
   for (const node of nodes) {
-    lines.push({ ...entry(node), text: `${"  ".repeat(depth)}${entry(node).text}` });
+    const line = entry(node);
+    lines.push({ ...line, text: `${"  ".repeat(depth)}${line.text}` });
     if (node.kind === "dir") lines.push(...drawTree(node.children, depth + 1));
   }
   return lines;
