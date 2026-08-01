@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { FileTree } from "./file-tree";
+import { manifest } from "@/content/manifest";
 
-export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
+export function MobileNavDrawer() {
   const [open, setOpen] = useState(false);
   const summaryRef = useRef<HTMLElement>(null);
   const pathname = usePathname();
@@ -31,6 +33,8 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [open]);
 
+  const currentPath = pathname === "/" ? "" : pathname.slice(1);
+
   return (
     <details
       open={open}
@@ -46,7 +50,7 @@ export function MobileNavDrawer({ children }: { children: React.ReactNode }) {
         <span className="text-cyan">~/portfolio-26</span>
       </summary>
       <nav aria-label="Files" className="max-h-[60dvh] overflow-auto border-t border-edge p-2">
-        {children}
+        <FileTree nodes={manifest} currentPath={currentPath} />
       </nav>
     </details>
   );

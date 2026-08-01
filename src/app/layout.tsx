@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
+import { TerminalFrame } from "@/components/terminal-frame";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -18,10 +19,18 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+  explorer,
+}: {
+  children: React.ReactNode;
+  explorer: React.ReactNode;
+}) {
   return (
     <html lang="en" className={jetbrainsMono.variable}>
-      <body>{children}</body>
+      <body>
+        <TerminalFrame explorer={explorer}>{children}</TerminalFrame>
+      </body>
     </html>
   );
 }

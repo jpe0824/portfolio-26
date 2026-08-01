@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
-import { TerminalFrame } from "@/components/terminal-frame";
-import { FileExplorer } from "@/components/file-explorer";
+import { PathLine } from "@/components/path-line";
 import { FileViewport } from "@/components/viewport/file-viewport";
 import { manifest } from "@/content/manifest";
 import { allPaths, resolveNode } from "@/content/resolve";
@@ -15,14 +14,16 @@ export default async function ContentPage({
   params: Promise<{ path?: string[] }>;
 }) {
   const { path } = await params;
-  const segments = path ?? [];
-  const node = resolveNode(manifest, segments);
+  const node = resolveNode(manifest, path ?? []);
 
   if (!node) notFound();
 
   return (
-    <TerminalFrame explorer={<FileExplorer currentPath={node.path} />} currentPath={node.path}>
-      <FileViewport node={node} />
-    </TerminalFrame>
+    <>
+      <PathLine path={node.path} />
+      <div className="min-h-0 flex-1 overflow-auto">
+        <FileViewport node={node} />
+      </div>
+    </>
   );
 }

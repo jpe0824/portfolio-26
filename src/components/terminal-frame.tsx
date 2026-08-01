@@ -1,18 +1,12 @@
-import { PathLine } from "./path-line";
 import { StatusBar } from "./status-bar";
-import { ChipRow } from "./chip-row";
 import { TopBar } from "./top-bar";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
-import { FileTree } from "./file-tree";
-import { manifest } from "@/content/manifest";
 
 export function TerminalFrame({
   explorer,
-  currentPath,
   children,
 }: {
   explorer: React.ReactNode;
-  currentPath: string;
   children: React.ReactNode;
 }) {
   return (
@@ -24,18 +18,18 @@ export function TerminalFrame({
         Skip to content
       </a>
       <TopBar />
-      <MobileNavDrawer>
-        <FileTree nodes={manifest} currentPath={currentPath} />
-      </MobileNavDrawer>
+      <MobileNavDrawer />
       <div className="flex min-h-0 flex-1">
         {explorer}
-        <main id="file-content" className="flex min-w-0 flex-1 flex-col">
-          <PathLine path={currentPath} />
-          <div className="min-h-0 flex-1 overflow-auto">{children}</div>
-        </main>
+        {/* Content column. Task 9 adds <TerminalPanel/> here as a sibling of <main>,
+            deliberately outside it so getByRole("main") stays a clean content scope. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <main id="file-content" className="flex min-h-0 flex-1 flex-col">
+            {children}
+          </main>
+        </div>
       </div>
       <StatusBar />
-      <ChipRow />
     </div>
   );
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="flex h-[100dvh] flex-col items-start justify-center gap-2 p-8">
+    <div className="flex flex-1 flex-col items-start justify-center gap-2 p-8">
       <p className="text-fg-muted">
         <span className="text-primary">$</span> cat &lt;unknown&gt;
       </p>
