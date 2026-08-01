@@ -104,7 +104,11 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
 
         if (result.kind === "cwd") setCwd(result.cwd);
         if (result.kind === "navigate") router.push(result.path);
-      } catch {
+      } catch (error) {
+        // The user-facing line assumes the one failure this branch actually sees
+        // (a rejected content-index fetch) — logging the real error keeps a future,
+        // unrelated throw here debuggable instead of silently mislabelled.
+        console.error(error);
         const [name] = input.trim().split(/\s+/);
         setEntries((past) => [
           ...past,
@@ -133,14 +137,21 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+      const typing =
+        target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || !!target?.isContentEditable;
 
-      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+      // Shift/Alt are deliberately excluded from both chords below: this project
+      // already dropped ⌘P rather than hijack a browser shortcut, and the same
+      // ruling applies here — Ctrl+Shift+K is Firefox's Web Console, so a chord
+      // we did not intend to claim must pass through untouched.
+      const noExtraModifiers = !event.shiftKey && !event.altKey;
+
+      if ((event.metaKey || event.ctrlKey) && noExtraModifiers && event.key === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
         return;
       }
-      if (event.ctrlKey && event.key === "`") {
+      if (event.ctrlKey && !event.metaKey && noExtraModifiers && event.key === "`") {
         event.preventDefault();
         setTerminalOpen((open) => !open);
         return;
