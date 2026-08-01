@@ -146,7 +146,9 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       // we did not intend to claim must pass through untouched.
       const noExtraModifiers = !event.shiftKey && !event.altKey;
 
-      if ((event.metaKey || event.ctrlKey) && noExtraModifiers && event.key === "k") {
+      // Exclusive-or, not "either": Ctrl+Cmd+K must not fire either — it isn't
+      // the chord we claimed, it's both of the alternates held at once.
+      if (event.metaKey !== event.ctrlKey && noExtraModifiers && event.key === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
         return;
