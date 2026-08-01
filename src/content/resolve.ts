@@ -1,4 +1,4 @@
-import type { ContentNode } from "./manifest";
+import type { ContentNode, FileNode } from "./manifest";
 
 export function resolveNode(nodes: ContentNode[], segments: string[]): ContentNode | null {
   const target = segments.join("/");
@@ -17,6 +17,15 @@ export function allPaths(nodes: ContentNode[]): string[] {
   for (const node of nodes) {
     out.push(node.path);
     if (node.kind === "dir") out.push(...allPaths(node.children));
+  }
+  return out;
+}
+
+export function allFiles(nodes: ContentNode[]): FileNode[] {
+  const out: FileNode[] = [];
+  for (const node of nodes) {
+    if (node.kind === "dir") out.push(...allFiles(node.children));
+    else out.push(node);
   }
   return out;
 }

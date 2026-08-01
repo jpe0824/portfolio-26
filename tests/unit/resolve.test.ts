@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allPaths, resolveNode } from "@/content/resolve";
+import { allFiles, allPaths, resolveNode } from "@/content/resolve";
 import type { ContentNode } from "@/content/manifest";
 
 const fixture: ContentNode[] = [
@@ -46,5 +46,15 @@ describe("resolveNode", () => {
 describe("allPaths", () => {
   it("includes every file and directory path", () => {
     expect(allPaths(fixture).sort()).toEqual(["", "projects", "projects/alpha", "whoami"]);
+  });
+});
+
+describe("allFiles", () => {
+  it("returns every file node and no directories", () => {
+    expect(allFiles(fixture).map((f) => f.source).sort()).toEqual([
+      "README.md",
+      "projects/alpha.md",
+      "whoami.md",
+    ]);
   });
 });
