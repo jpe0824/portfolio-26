@@ -154,3 +154,69 @@ describe("runCommand", () => {
     expect(lines(await runCommand("sl", ctx()))).toEqual([{ text: UNKNOWN_INPUT, tone: "dim" }]);
   });
 });
+
+describe("cat and grep", () => {
+  it("cat prints file contents line by line", async () => {
+    const context = { ...ctx(), readFile: async () => "line one\nline two" };
+    expect(text(await runCommand("cat whoami.md", context))).toEqual(["line one", "line two"]);
+  });
+
+  it("cat resolves relative to cwd", async () => {
+    const seen: string[] = [];
+    const context = {
+      ...ctx("projects"),
+      readFile: async (source: string) => {
+        seen.push(source);
+        return "ok";
+      },
+    };
+    await runCommand("cat 1kout.md", context);
+    expect(seen).toEqual(["projects/1kout.md"]);
+  });
+
+  it("cat reports a missing file", async () => {
+    expect(text(await runCommand("cat nope", ctx()))).toEqual([
+      "cat: no such file or directory: nope",
+    ]);
+  });
+
+  it("cat refuses a directory", async () => {
+    expect(text(await runCommand("cat projects", ctx()))).toEqual([
+      "cat: projects: is a directory",
+    ]);
+  });
+
+  it("grep formats hits as path:line text", async () => {
+    const context = {
+      ...ctx(),
+      grep: async () => [{ path: "whoami.md", line: 3, text: "senior engineer" }],
+    };
+    expect(text(await runCommand("grep senior", context))).toEqual([
+      "whoami.md:3  senior engineer",
+    ]);
+  });
+
+  it("grep reports no matches", async () => {
+    expect(text(await runCommand("grep zzz", ctx()))).toEqual(["grep: no matches for zzz"]);
+  });
+
+  it("grep requires a term", async () => {
+    expect(text(await runCommand("grep", ctx()))).toEqual(["grep: missing operand"]);
+  });
+});
+
+describe("slash commands", () => {
+  it("/contact navigates to contact", async () => {
+    expect(await runCommand("/contact", ctx())).toEqual({ kind: "navigate", path: "/contact" });
+  });
+
+  it("/help lists commands, like help", async () => {
+    const slash = text(await runCommand("/help", ctx()));
+    const plain = text(await runCommand("help", ctx()));
+    expect(slash).toEqual(plain);
+  });
+
+  it("/ai reports that it is not connected", async () => {
+    expect(text(await runCommand("/ai", ctx()))).toEqual(["▸ not connected — phase 2b"]);
+  });
+});

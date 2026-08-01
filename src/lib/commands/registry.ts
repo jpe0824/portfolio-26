@@ -1,6 +1,7 @@
 import { listDir } from "@/content/resolve";
 import type { ContentNode } from "@/content/manifest";
 import { resolveArg, resolvePath } from "./resolve-path";
+import { rendererFor } from "@/lib/renderer-map";
 import type { CommandContext, CommandResult, OutputLine } from "./types";
 
 export const UNKNOWN_INPUT = "▸ not a command. phase 2b will route this to the model.";
@@ -77,6 +78,35 @@ export const commands: Command[] = [
     },
   },
   {
+    name: "cat",
+    summary: "print a file",
+    async run(args, ctx) {
+      const target = args[0];
+      if (!target) return error("cat: missing operand");
+
+      const node = resolveArg(ctx.manifest, target, ctx.cwd);
+      if (!node) return error(`cat: no such file or directory: ${target}`);
+      if (node.kind === "dir") return error(`cat: ${node.name}: is a directory`);
+      if (rendererFor(node.name) === "image") return error(`cat: ${node.name}: binary file`);
+
+      const source = await ctx.readFile(node.source);
+      return out(...source.split("\n").map((text) => ({ text })));
+    },
+  },
+  {
+    name: "grep",
+    summary: "search the content tree",
+    async run(args, ctx) {
+      const term = args.join(" ");
+      if (!term) return error("grep: missing operand");
+
+      const hits = await ctx.grep(term);
+      if (hits.length === 0) return error(`grep: no matches for ${term}`);
+
+      return out(...hits.map((hit) => ({ text: `${hit.path}:${hit.line}  ${hit.text}` })));
+    },
+  },
+  {
     name: "open",
     summary: "open a file in the editor",
     run(args, ctx) {
@@ -109,6 +139,27 @@ export const commands: Command[] = [
       return out(
         ...commands.map((c) => ({ text: `${c.name.padEnd(width + 2)}${c.summary}` })),
       );
+    },
+  },
+  {
+    name: "/help",
+    summary: "list available commands",
+    run(args, ctx) {
+      return (findCommand("help") as Command).run(args, ctx);
+    },
+  },
+  ...(["whoami", "projects", "stack", "contact"] as const).map((target) => ({
+    name: `/${target}`,
+    summary: `open ${target}`,
+    run(): CommandResult {
+      return { kind: "navigate", path: `/${target}` };
+    },
+  })),
+  {
+    name: "/ai",
+    summary: "chat with the model",
+    run(): CommandResult {
+      return out({ text: "▸ not connected — phase 2b", tone: "dim" });
     },
   },
 ];
