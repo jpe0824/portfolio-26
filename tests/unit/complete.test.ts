@@ -54,6 +54,16 @@ describe("complete", () => {
     expect(result.candidates).toEqual(["personal/", "professional/"]);
   });
 
+  it("extends an ambiguous directory listing without resolving it", () => {
+    // Second Tab on "cd projects/": both children match the empty stem, but
+    // they share a longer prefix ("p") than what's typed (""), so this hits
+    // the extend-without-resolving branch — completed grows, candidates stay empty.
+    expect(complete("cd projects/", ctx())).toEqual({
+      completed: "cd projects/p",
+      candidates: [],
+    });
+  });
+
   it("completes relative to cwd", () => {
     expect(complete("cd pers", ctx("projects"))).toEqual({
       completed: "cd personal/",
@@ -67,5 +77,18 @@ describe("complete", () => {
 
   it("leaves empty input alone", () => {
     expect(complete("", ctx())).toEqual({ completed: "", candidates: [] });
+  });
+
+  it("completes a unique command despite leading whitespace", () => {
+    // A leading space means nothing precedes the active token, so this is
+    // still the first (command) position — not a path argument.
+    expect(complete(" ls", ctx())).toEqual({ completed: " ls ", candidates: [] });
+  });
+
+  it("lists ambiguous commands despite leading whitespace, preserving it", () => {
+    expect(complete(" c", ctx())).toEqual({
+      completed: " c",
+      candidates: ["cd", "cat", "close", "clear"],
+    });
   });
 });

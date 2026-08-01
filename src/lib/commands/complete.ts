@@ -19,8 +19,10 @@ export function complete(input: string, ctx: CommandContext): Completion {
   const head = input.slice(0, boundary + 1);
   const token = input.slice(boundary + 1);
 
-  const options =
-    boundary === -1 ? commandOptions(token) : pathOptions(token, ctx);
+  // Command-vs-path is decided by whether anything precedes the active token,
+  // not by whether a space exists — leading whitespace alone (" ls") must
+  // still be treated as the first token, not a path argument.
+  const options = head.trim() === "" ? commandOptions(token) : pathOptions(token, ctx);
 
   if (options.matches.length === 0) return { completed: input, candidates: [] };
 
