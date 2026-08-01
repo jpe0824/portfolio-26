@@ -29,3 +29,10 @@ export function allFiles(nodes: ContentNode[]): FileNode[] {
   }
   return out;
 }
+
+/** Children of a directory path. The root ("") is the manifest itself. Null if not a directory. */
+export function listDir(nodes: ContentNode[], path: string): ContentNode[] | null {
+  if (path === "") return nodes;
+  const node = resolveNode(nodes, path.split("/"));
+  return node && node.kind === "dir" ? node.children : null;
+}
