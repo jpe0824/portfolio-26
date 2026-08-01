@@ -2,7 +2,8 @@ export type FileNode = {
   kind: "file";
   /** Filename with extension, as displayed in the explorer. */
   name: string;
-  /** URL path without extension. The landing page uses "". */
+  /** URL path without extension. Never "" — "/" is the empty state, handled in
+   * [[...path]]/page.tsx with no manifest entry. */
   path: string;
   /** Path relative to src/content/files. */
   source: string;
