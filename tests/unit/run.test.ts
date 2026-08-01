@@ -15,6 +15,17 @@ const fixture: ContentNode[] = [
       { kind: "file", name: "1kout.md", path: "projects/1kout", source: "projects/1kout.md", title: "1kout" },
     ],
   },
+  {
+    kind: "dir",
+    name: "assets",
+    path: "assets",
+    title: "assets",
+    // Mirrors the real manifest's assets/je-mark.svg — an image node is required
+    // to exercise cat's binary-file guard (rendererFor(...) === "image").
+    children: [
+      { kind: "file", name: "je-mark.svg", path: "assets/je-mark", source: "assets/je-mark.svg", title: "je-mark" },
+    ],
+  },
 ];
 
 function ctx(cwd = ""): CommandContext {
@@ -43,13 +54,14 @@ describe("runCommand", () => {
   });
 
   it("ls lists the root", async () => {
-    expect(text(await runCommand("ls", ctx()))).toEqual(["whoami.md", "projects/"]);
+    expect(text(await runCommand("ls", ctx()))).toEqual(["whoami.md", "projects/", "assets/"]);
   });
 
   it("ls tags directories with accent tone and leaves files untoned", async () => {
     expect(lines(await runCommand("ls", ctx()))).toEqual([
       { text: "whoami.md" },
       { text: "projects/", tone: "accent" },
+      { text: "assets/", tone: "accent" },
     ]);
   });
 
@@ -128,6 +140,8 @@ describe("runCommand", () => {
       "whoami.md",
       "projects/",
       "  1kout.md",
+      "assets/",
+      "  je-mark.svg",
     ]);
   });
 
@@ -136,6 +150,8 @@ describe("runCommand", () => {
       { text: "whoami.md" },
       { text: "projects/", tone: "accent" },
       { text: "  1kout.md" },
+      { text: "assets/", tone: "accent" },
+      { text: "  je-mark.svg" },
     ]);
   });
 
@@ -186,6 +202,28 @@ describe("cat and grep", () => {
     ]);
   });
 
+  it("cat with no argument reports a missing operand", async () => {
+    expect(text(await runCommand("cat", ctx()))).toEqual(["cat: missing operand"]);
+  });
+
+  it("cat refuses a binary file and never reads it", async () => {
+    // readFile both records every call and throws if invoked, so this proves
+    // the image guard short-circuits rather than merely that the message text
+    // happens to match what a real read would have produced.
+    const seen: string[] = [];
+    const context = {
+      ...ctx(),
+      readFile: async (source: string) => {
+        seen.push(source);
+        throw new Error("readFile should not be called for a binary file");
+      },
+    };
+    expect(text(await runCommand("cat assets/je-mark.svg", context))).toEqual([
+      "cat: je-mark.svg: binary file",
+    ]);
+    expect(seen).toEqual([]);
+  });
+
   it("grep formats hits as path:line text", async () => {
     const context = {
       ...ctx(),
@@ -218,5 +256,11 @@ describe("slash commands", () => {
 
   it("/ai reports that it is not connected", async () => {
     expect(text(await runCommand("/ai", ctx()))).toEqual(["▸ not connected — phase 2b"]);
+  });
+
+  it("/ai output carries dim tone", async () => {
+    expect(lines(await runCommand("/ai", ctx()))).toEqual([
+      { text: "▸ not connected — phase 2b", tone: "dim" },
+    ]);
   });
 });
