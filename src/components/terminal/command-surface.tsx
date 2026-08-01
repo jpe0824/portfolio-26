@@ -1,0 +1,175 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { manifest } from "@/content/manifest";
+import { complete } from "@/lib/commands/complete";
+import { runCommand } from "@/lib/commands/run";
+import { displayPath } from "@/lib/commands/registry";
+import type { CommandContext, GrepHit, OutputLine } from "@/lib/commands/types";
+
+export type Entry = { id: number; prompt?: string; lines: OutputLine[] };
+
+type Surface = {
+  terminalOpen: boolean;
+  setTerminalOpen: (open: boolean) => void;
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
+  cwd: string;
+  entries: Entry[];
+  history: string[];
+  submit: (input: string) => Promise<void>;
+  completeInput: (input: string) => string;
+};
+
+const SurfaceContext = createContext<Surface | null>(null);
+
+export function useCommandSurface(): Surface {
+  const surface = useContext(SurfaceContext);
+  if (!surface) throw new Error("useCommandSurface must be used inside <CommandSurface>");
+  return surface;
+}
+
+// Fetched once, on the first cat or grep, and cached for the page's lifetime —
+// but only on success. A rejected fetch (offline, 404, malformed JSON) must not
+// pin the failure forever, since a later retry (e.g. the visitor's connection
+// comes back) needs a fresh attempt rather than the same dead promise.
+let indexPromise: Promise<Record<string, string>> | null = null;
+
+function contentIndex(): Promise<Record<string, string>> {
+  indexPromise ??= fetch("/content-index.json")
+    .then((response) => {
+      if (!response.ok) throw new Error(`content index request failed: ${response.status}`);
+      return response.json();
+    })
+    .catch((error: unknown) => {
+      indexPromise = null;
+      throw error;
+    });
+  return indexPromise;
+}
+
+export function CommandSurface({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [cwd, setCwd] = useState("");
+  const [entries, setEntries] = useState<Entry[]>([]);
+  const [history, setHistory] = useState<string[]>([]);
+  const nextId = useRef(0);
+
+  const ctx = useMemo<CommandContext>(
+    () => ({
+      cwd,
+      manifest,
+      readFile: async (source) => (await contentIndex())[source] ?? "",
+      grep: async (term) => {
+        const index = await contentIndex();
+        const needle = term.toLowerCase();
+        const hits: GrepHit[] = [];
+        for (const [path, body] of Object.entries(index)) {
+          body.split("\n").forEach((text, i) => {
+            if (text.toLowerCase().includes(needle)) {
+              hits.push({ path, line: i + 1, text: text.trim() });
+            }
+          });
+        }
+        return hits;
+      },
+    }),
+    [cwd],
+  );
+
+  const submit = useCallback(
+    async (input: string) => {
+      const prompt = `${displayPath(cwd)} ❯ ${input}`;
+      if (input.trim() !== "") setHistory((past) => [...past, input]);
+
+      // cat and grep await ctx.readFile/ctx.grep with no try/catch of their own,
+      // so a rejected content-index fetch would otherwise propagate out of
+      // runCommand and into submit's `void submit(value)` caller as an unhandled
+      // rejection — silently swallowing the command instead of reporting it.
+      try {
+        const result = await runCommand(input, ctx);
+
+        if (result.kind === "clear") {
+          setEntries([]);
+          return;
+        }
+
+        setEntries((past) => [
+          ...past,
+          { id: nextId.current++, prompt, lines: result.kind === "output" ? result.lines : [] },
+        ]);
+
+        if (result.kind === "cwd") setCwd(result.cwd);
+        if (result.kind === "navigate") router.push(result.path);
+      } catch {
+        const [name] = input.trim().split(/\s+/);
+        setEntries((past) => [
+          ...past,
+          {
+            id: nextId.current++,
+            prompt,
+            lines: [{ text: `${name}: content index unavailable`, tone: "error" }],
+          },
+        ]);
+      }
+    },
+    [ctx, cwd, router],
+  );
+
+  const completeInput = useCallback((input: string) => {
+    const { completed, candidates } = complete(input, ctx);
+    if (candidates.length > 0) {
+      setEntries((past) => [
+        ...past,
+        { id: nextId.current++, lines: [{ text: candidates.join("   "), tone: "dim" }] },
+      ]);
+    }
+    return completed;
+  }, [ctx]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA";
+
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+        return;
+      }
+      if (event.ctrlKey && event.key === "`") {
+        event.preventDefault();
+        setTerminalOpen((open) => !open);
+        return;
+      }
+      if (event.key === "?" && !typing) {
+        event.preventDefault();
+        setTerminalOpen(true);
+        void submit("help");
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [submit]);
+
+  const value = useMemo<Surface>(
+    () => ({
+      terminalOpen,
+      setTerminalOpen,
+      paletteOpen,
+      setPaletteOpen,
+      cwd,
+      entries,
+      history,
+      submit,
+      completeInput,
+    }),
+    [terminalOpen, paletteOpen, cwd, entries, history, submit, completeInput],
+  );
+
+  return <SurfaceContext.Provider value={value}>{children}</SurfaceContext.Provider>;
+}

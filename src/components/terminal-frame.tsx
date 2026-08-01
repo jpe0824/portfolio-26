@@ -1,6 +1,7 @@
 import { StatusBar } from "./status-bar";
 import { TopBar } from "./top-bar";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
+import { CommandSurface } from "./terminal/command-surface";
 
 export function TerminalFrame({
   explorer,
@@ -10,26 +11,28 @@ export function TerminalFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden">
-      <a
-        href="#file-content"
-        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-elevated focus:px-3 focus:py-1 focus:text-primary-hi"
-      >
-        Skip to content
-      </a>
-      <TopBar />
-      <MobileNavDrawer />
-      <div className="flex min-h-0 flex-1">
-        {explorer}
-        {/* Content column. Task 9 adds <TerminalPanel/> here as a sibling of <main>,
-            deliberately outside it so getByRole("main") stays a clean content scope. */}
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main id="file-content" className="flex min-h-0 flex-1 flex-col">
-            {children}
-          </main>
+    <CommandSurface>
+      <div className="flex h-[100dvh] flex-col overflow-hidden">
+        <a
+          href="#file-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:bg-elevated focus:px-3 focus:py-1 focus:text-primary-hi"
+        >
+          Skip to content
+        </a>
+        <TopBar />
+        <MobileNavDrawer />
+        <div className="flex min-h-0 flex-1">
+          {explorer}
+          {/* Content column. Task 9 adds <TerminalPanel/> here as a sibling of <main>,
+              deliberately outside it so getByRole("main") stays a clean content scope. */}
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main id="file-content" className="flex min-h-0 flex-1 flex-col">
+              {children}
+            </main>
+          </div>
         </div>
+        <StatusBar />
       </div>
-      <StatusBar />
-    </div>
+    </CommandSurface>
   );
 }
