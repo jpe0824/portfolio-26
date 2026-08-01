@@ -1,0 +1,9 @@
+{
+  "film": "Interstellar",
+  "show": "Breaking Bad",
+  "books": ["Dungeon Crawler Carl"],
+  "teams": {
+    "mlb": "Dodgers",
+    "nba": "Lakers"
+  }
+}

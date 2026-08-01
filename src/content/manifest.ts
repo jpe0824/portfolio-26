@@ -29,11 +29,33 @@ export const manifest: ContentNode[] = [
     path: "projects",
     title: "projects",
     children: [
-      { kind: "file", name: "one.md", path: "projects/one", source: "projects/one.md", title: "project one" },
-      { kind: "file", name: "two.md", path: "projects/two", source: "projects/two.md", title: "project two" },
+      {
+        kind: "dir",
+        name: "personal",
+        path: "projects/personal",
+        title: "personal",
+        children: [
+          { kind: "file", name: "1kout.md", path: "projects/personal/1kout", source: "projects/personal/1kout.md", title: "1kout" },
+          { kind: "file", name: "shapeshift.md", path: "projects/personal/shapeshift", source: "projects/personal/shapeshift.md", title: "shapeshift" },
+          { kind: "file", name: "portfolios.md", path: "projects/personal/portfolios", source: "projects/personal/portfolios.md", title: "portfolios" },
+        ],
+      },
+      {
+        kind: "dir",
+        name: "professional",
+        path: "projects/professional",
+        title: "professional",
+        children: [
+          { kind: "file", name: "migration.md", path: "projects/professional/migration", source: "projects/professional/migration.md", title: "migration" },
+          { kind: "file", name: "uamps-app.md", path: "projects/professional/uamps-app", source: "projects/professional/uamps-app.md", title: "uamps-app" },
+          { kind: "file", name: "uamps-com.md", path: "projects/professional/uamps-com", source: "projects/professional/uamps-com.md", title: "uamps-com" },
+          { kind: "file", name: "passwords.md", path: "projects/professional/passwords", source: "projects/professional/passwords.md", title: "passwords" },
+        ],
+      },
     ],
   },
   { kind: "file", name: "stack.json", path: "stack", source: "stack.json", title: "stack" },
+  { kind: "file", name: "favorites.json", path: "favorites", source: "favorites.json", title: "favorites" },
   { kind: "file", name: "contact.json", path: "contact", source: "contact.json", title: "contact" },
   {
     kind: "dir",

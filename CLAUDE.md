@@ -89,6 +89,13 @@ Markdown is rendered with `marked` and injected via `dangerouslySetInnerHTML` �
 because content is first-party and read at build time. **If content ever becomes user-supplied,
 sanitize it.**
 
+**JSON link rule:** `JsonFile` renders a string value as an anchor when `hrefForJsonString`
+(`src/lib/json-link.ts`) recognizes it as a whole-string `http(s)` URL; a value that merely contains
+a URL does not link. Quotes render outside the anchor so the tokenizer's `join("") === line` invariant holds.
+Links keep the string color, never `primary`, because `primary` is the key color.
+Email is deliberately not linkified and no address is published: the site is indexed, and a `mailto:`
+beside a real name is what address harvesters match on. Contact runs through GitHub and LinkedIn.
+
 **Image rule:** `ImageFile` builds its URL from the filename alone, discarding the directory. So every
 image filename must be **globally unique across the content tree**, and every image needs a matching
 copy in `public/`. A basename collision silently serves the wrong image; a missing `public/` copy 404s
@@ -128,19 +135,23 @@ certificate.
   raw `*.vercel.app` alias sits behind Vercel's Standard/SSO Protection team default — the custom
   domain is the actual public, shareable link)
 
-## ⚠️ Temporary: search indexing is disabled
+## Search indexing
 
-`src/app/layout.tsx` sets `robots: { index: false, follow: false }`. This is deliberate — the site is
-live and shareable, but content is still placeholder, and placeholder copy should not be cached against
-a real person's name. **Remove it when real content lands.** Deployment Protection is intentionally
-off; `noindex` is the only thing holding this back.
+Indexing is enabled. `src/app/layout.tsx` sets no `robots` directive, so pages are indexable by
+default. A `noindex` was in place while the site carried placeholder copy and came off on 2026-07-31
+once real content landed.
 
-Correction found during the 2026-07-31 deploy: the project's actual protection setting is
-`ssoProtection: all_except_custom_domains` (a `jason-personal` team default for new projects), not a
-blanket "off." This means the raw `*.vercel.app` alias requires Vercel SSO login, while the custom
-domain `jsonedman.dev` — the link that actually gets shared — is fully public. If the `*.vercel.app`
-alias also needs to be public, disable SSO Protection explicitly: `vercel project protection disable
-portfolio-26 --sso --scope jason-personal-f16e1530`. Left untouched here pending owner decision.
+Deployment Protection is a separate axis and is unchanged. The project's setting is
+`ssoProtection: all_except_custom_domains`, a `jason-personal` team default for new projects rather
+than a blanket "off". The raw `*.vercel.app` alias requires Vercel SSO login; the custom domain
+`jsonedman.dev`, which is the link that actually gets shared, is fully public. To make the
+`*.vercel.app` alias public as well:
+
+    vercel project protection disable portfolio-26 --sso --scope jason-personal-f16e1530
+
+Left untouched pending owner decision.
+
+**Indexing is controlled in code and takes effect only in a deployed build.**
 
 ## Phases
 

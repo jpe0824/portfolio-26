@@ -29,6 +29,23 @@ test("renders a directory listing", async ({ page }) => {
   await expect(page.getByRole("main").getByRole("link", { name: "je-mark.svg" })).toBeVisible();
 });
 
+test("renders a two-level directory listing", async ({ page }) => {
+  await page.goto("/projects/personal");
+  const main = page.getByRole("main");
+  await expect(main.getByRole("link", { name: "1kout.md" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "shapeshift.md" })).toBeVisible();
+  await expect(main.getByRole("link", { name: "portfolios.md" })).toBeVisible();
+});
+
+test("linkifies contact URLs but not plain values", async ({ page }) => {
+  await page.goto("/contact");
+  const main = page.getByRole("main");
+  const linkedin = main.getByRole("link", { name: "https://www.linkedin.com/in/jasonedman/" });
+  await expect(linkedin).toHaveAttribute("href", "https://www.linkedin.com/in/jasonedman/");
+  await expect(main.getByText("Salt Lake City, Utah")).toBeVisible();
+  await expect(main.getByRole("link", { name: "Salt Lake City, Utah" })).toHaveCount(0);
+});
+
 test("shows a terminal 404 for an unknown path", async ({ page }) => {
   await page.goto("/nope");
   await expect(page.getByText("No such file or directory")).toBeVisible();

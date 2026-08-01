@@ -1,10 +1,20 @@
 # jason edman
 
-You have reached my personal IDE.
+Senior software engineer. This is my personal IDE.
 
-Navigate with the file explorer. Everything here is a file — prose is
-markdown, structured data is JSON, history is a log.
+Everything here is a file. Prose is markdown, structured data is JSON,
+history is a log. Navigate with the file explorer.
 
-## Currently
+## start here
+
+- `whoami.md`: the short version
+- `experience.log`: where I've worked and what I shipped
+- `projects/`: personal and professional builds
+
+## find me
+
+[GitHub](https://github.com/jpe0824) · [LinkedIn](https://www.linkedin.com/in/jasonedman/) · more in `contact.json`
+
+## currently
 
 Building this. A local model and a `/commands` palette are next.

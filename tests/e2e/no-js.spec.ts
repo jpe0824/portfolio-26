@@ -16,10 +16,14 @@ test("explorer navigation works without JavaScript", async ({ page }) => {
 
 test("folder disclosure works without JavaScript", async ({ page }) => {
   await page.goto("/");
-  const summary = desktopNav(page).locator("summary").filter({ hasText: "projects/" });
-  await expect(desktopNav(page).getByRole("link", { name: "one.md" })).toBeHidden();
-  await summary.click();
-  await expect(desktopNav(page).getByRole("link", { name: "one.md" })).toBeVisible();
+  const projects = desktopNav(page).locator("summary").filter({ hasText: "projects/" });
+  const personal = desktopNav(page).locator("summary").filter({ hasText: "personal/" });
+  await expect(personal).toBeHidden();
+  await projects.click();
+  await expect(personal).toBeVisible();
+  await expect(desktopNav(page).getByRole("link", { name: "1kout.md" })).toBeHidden();
+  await personal.click();
+  await expect(desktopNav(page).getByRole("link", { name: "1kout.md" })).toBeVisible();
 });
 
 test("the mobile drawer opens without JavaScript", async ({ page }) => {

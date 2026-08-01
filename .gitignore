@@ -41,6 +41,7 @@ yarn-error.log*
 next-env.d.ts
 
 # Local AI/agent working files — never commit
+.superpowers/
 docs/plans/
 docs/specs/
 docs/superpowers/

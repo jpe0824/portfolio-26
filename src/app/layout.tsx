@@ -10,11 +10,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "jason edman",
-  description: "Jason Edman — portfolio, served as a terminal session.",
-  // TEMPORARY: remove once real content replaces the placeholders.
-  // Live and shareable, but kept out of search indexes so placeholder copy
-  // isn't cached against a real person's name.
-  robots: { index: false, follow: false },
+  description: "Jason Edman, senior software engineer.",
 };
 
 export const viewport: Viewport = {
