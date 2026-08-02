@@ -12,7 +12,15 @@
  * `jason` and `edman` inside that slug, so the pattern cannot match it, and no URL special
  * case is needed anywhere in this file.
  */
-const NAME = /\bJason(?:\s+Edman)?(?:['’']s)?\b/gi;
+
+/**
+ * ASCII U+0027 and typographic U+2019. Written as escapes, never as literal glyphs:
+ * the two are visually near-identical, and a mistyped class silently stops matching
+ * the form models actually emit.
+ */
+const APOSTROPHE = "[\\u0027\\u2019]";
+
+const NAME = new RegExp(`\\bJason(?:\\s+Edman)?(?:${APOSTROPHE}s)?\\b`, "gi");
 
 /**
  * How far back to look for a bare prefix of "jason" at the very end of the buffer.
@@ -44,7 +52,8 @@ function shouldCapitalize(offset: number, string: string, precedingChar: string 
 }
 
 function pronounFor(match: string, offset: number, string: string): string {
-  const possessive = /['’']s$/.test(match);
+  const possessiveRegex = new RegExp(`${APOSTROPHE}s$`);
+  const possessive = possessiveRegex.test(match);
   const capitalized = shouldCapitalize(offset, string, null);
 
   if (possessive) return capitalized ? "His" : "his";
@@ -82,7 +91,8 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
       // Check if it’s all whitespace + optional partial edman + optional possessive.
       // PARTIAL tests "jason" at the start, but we need to test what comes after.
       // Strip the leading "jason" and test the tail: space + optional edman + optional possessive.
-      if (/^\s*(?:e|ed|edm|edma|edman)?[‘’’]?s?$/i.test(afterJason)) {
+      const tailRegex = new RegExp(`^\\s*(?:e|ed|edm|edma|edman)?${APOSTROPHE}?s?$`, "i");
+      if (tailRegex.test(afterJason)) {
         // Safe to cut before "jason".
         return lastJasonIndex;
       }
@@ -103,8 +113,9 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
   }
 
   function redactWithContext(text: string): string {
+    const possessiveRegex = new RegExp(`${APOSTROPHE}s$`);
     return text.replace(NAME, (match: string, offset: number, string: string) => {
-      const possessive = /['’']s$/.test(match);
+      const possessive = possessiveRegex.test(match);
       const capitalized = shouldCapitalize(offset, string, lastChar || null);
 
       if (possessive) return capitalized ? "His" : "his";

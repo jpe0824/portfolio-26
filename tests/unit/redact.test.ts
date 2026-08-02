@@ -26,6 +26,10 @@ describe("redactText", () => {
     expect(redactText("Jason’s stack")).toBe("His stack");
   });
 
+  it("matches possessive with ASCII apostrophe U+0027", () => {
+    expect(redactText("Jason’s homelab")).toBe("His homelab");
+  });
+
   it("leaves the name inside a URL untouched", () => {
     // \bJason\b cannot match inside "jasonedman" — the next character is a word
     // character, so there is no boundary. This is why URLs need no special case.
@@ -103,5 +107,9 @@ describe("createRedactor", () => {
     const source = "A terminal portfolio with a grounded chat mode. No names here at all.";
     const chunks = source.match(/.{1,3}/g) ?? [];
     expect(run(chunks)).toBe(source);
+  });
+
+  it("matches possessive with ASCII apostrophe U+0027 across chunk boundary", () => {
+    expect(run(["Jason'", "s stack"])).toBe("His stack");
   });
 });
