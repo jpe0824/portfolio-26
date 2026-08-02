@@ -26,10 +26,12 @@ describe("redactText", () => {
     expect(redactText("Jason’s stack")).toBe("His stack");
   });
 
-  it("matches possessive with ASCII apostrophe U+0027", () => {
-    expect(redactText("Jason’s homelab")).toBe("His homelab");
+  it("turns an ASCII-apostrophe possessive into his", () => {
+    // "Jason's stack" with U+0027. Written as an escape because this test
+    // exists specifically to pin the ASCII form, and a mistyped literal
+    // would silently make it a duplicate of the typographic test above.
+    expect(redactText("Jason's homelab")).toBe("His homelab");
   });
-
   it("leaves the name inside a URL untouched", () => {
     // \bJason\b cannot match inside "jasonedman" — the next character is a word
     // character, so there is no boundary. This is why URLs need no special case.
