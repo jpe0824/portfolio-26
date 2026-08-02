@@ -119,7 +119,10 @@ Playwright config specifics, all load-bearing:
   turning a "mobile" run into a desktop-sized duplicate. Only pin a viewport at file scope for a test
   that is reproducing one specific fixed-size case, and scope the `test.use` to a `describe` block
   around just that test — never the whole file — so the rest of the file still exercises the
-  project's real viewport.
+  project's real viewport. The one exception is a file whose entire subject does not exist above (or
+  below) the breakpoint it tests — e.g. the mobile drawer, `md:hidden` with no desktop equivalent —
+  where there is no real-viewport coverage to lose by pinning the whole file, and running it under
+  the project's own viewport would either test nothing or contradict itself.
 
 ## Local development
 

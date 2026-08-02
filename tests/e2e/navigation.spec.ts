@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-test.use({ viewport: { width: 1440, height: 900 } });
-
 test("renders the empty state at the root", async ({ page }) => {
   await page.goto("/");
   const main = page.getByRole("main");
@@ -9,11 +7,18 @@ test("renders the empty state at the root", async ({ page }) => {
   await expect(main.getByRole("heading")).toHaveCount(0);
 });
 
-test("navigates from the explorer to a file", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("navigation", { name: "File explorer" }).getByRole("link", { name: "whoami.md" }).click();
-  await expect(page).toHaveURL("/whoami");
-  await expect(page.getByRole("heading", { name: "whoami" })).toBeVisible();
+// The desktop explorer landmark (`hidden md:block`) does not exist in the accessibility tree
+// below the md breakpoint, so this needs a real desktop viewport regardless of which project
+// runs this file — the mobile drawer is a separate component covered by drawer.spec.ts.
+test.describe("desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("navigates from the explorer to a file", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("navigation", { name: "File explorer" }).getByRole("link", { name: "whoami.md" }).click();
+    await expect(page).toHaveURL("/whoami");
+    await expect(page.getByRole("heading", { name: "whoami" })).toBeVisible();
+  });
 });
 
 test("syntax highlights JSON", async ({ page }) => {

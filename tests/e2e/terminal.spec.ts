@@ -1,7 +1,5 @@
 import { expect, test } from "@playwright/test";
 
-test.use({ viewport: { width: 1440, height: 900 } });
-
 const term = (page: import("@playwright/test").Page) =>
   page.getByRole("region", { name: "Terminal" });
 
@@ -119,32 +117,40 @@ test("blank lines in cat output are not collapsed to zero height", async ({ page
   expect(blank!.height).toBeGreaterThanOrEqual(nonBlank!.height - 2);
 });
 
-test("scrollback survives navigation", async ({ page }) => {
-  await openTerminal(page);
-  await run(page, "ls");
-  await run(page, "open whoami.md");
+// This test genuinely needs a real desktop viewport, regardless of which project runs this
+// file: it navigates via the desktop-only explorer landmark (`hidden md:block`, not in the
+// accessibility tree below md). A mobile visitor would navigate via the drawer instead, which
+// is a different component covered by drawer.spec.ts.
+test.describe("desktop", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
 
-  await expect(page).toHaveURL("/whoami");
-  await expect(page.getByRole("main").getByRole("heading", { name: "whoami" })).toBeVisible();
-  await expect(term(page).getByText("~/portfolio-26 ❯ ls")).toBeVisible();
+  test("scrollback survives navigation", async ({ page }) => {
+    await openTerminal(page);
+    await run(page, "ls");
+    await run(page, "open whoami.md");
 
-  // The check above, on its own, proves less than it looks like: `entries` lives in
-  // CommandSurface, which was already always-mounted in the frame (Task 8), so that text would
-  // still be there even if TerminalPanel itself remounted on every route change — a fresh
-  // instance would just re-read the same context value. An unsubmitted draft is local state
-  // TerminalPanel owns itself; it can only survive a navigation if the panel instance does. That
-  // is the property this task's frame placement is actually responsible for, and it's the one
-  // that goes red in Step 6 when the panel is rendered from the page instead.
-  const input = term(page).getByLabel("Terminal input");
-  await input.fill("cat wh");
-  await page
-    .getByRole("navigation", { name: "File explorer" })
-    .getByRole("link", { name: "README.md" })
-    .click();
+    await expect(page).toHaveURL("/whoami");
+    await expect(page.getByRole("main").getByRole("heading", { name: "whoami" })).toBeVisible();
+    await expect(term(page).getByText("~/portfolio-26 ❯ ls")).toBeVisible();
 
-  await expect(page).toHaveURL("/readme");
-  await expect(term(page).getByText("~/portfolio-26 ❯ ls")).toBeVisible();
-  await expect(input).toHaveValue("cat wh");
+    // The check above, on its own, proves less than it looks like: `entries` lives in
+    // CommandSurface, which was already always-mounted in the frame (Task 8), so that text would
+    // still be there even if TerminalPanel itself remounted on every route change — a fresh
+    // instance would just re-read the same context value. An unsubmitted draft is local state
+    // TerminalPanel owns itself; it can only survive a navigation if the panel instance does. That
+    // is the property this task's frame placement is actually responsible for, and it's the one
+    // that goes red in Step 6 when the panel is rendered from the page instead.
+    const input = term(page).getByLabel("Terminal input");
+    await input.fill("cat wh");
+    await page
+      .getByRole("navigation", { name: "File explorer" })
+      .getByRole("link", { name: "README.md" })
+      .click();
+
+    await expect(page).toHaveURL("/readme");
+    await expect(term(page).getByText("~/portfolio-26 ❯ ls")).toBeVisible();
+    await expect(input).toHaveValue("cat wh");
+  });
 });
 
 test("cd changes the prompt without navigating", async ({ page }) => {
@@ -236,9 +242,9 @@ test("unrecognized input points at the model stub", async ({ page }) => {
 });
 
 test.describe("phone viewport", () => {
-  // The suite's file-level 1440x900 override above applies regardless of which Playwright
-  // project runs it, so nothing above this block ever actually exercises the terminal at a phone
-  // width even under the "mobile" project. This block opts back out with a real phone size.
+  // Pinned to a specific, real phone size rather than relying on the mobile project's own
+  // device viewport, so this exercises one fixed, reproducible narrow width regardless of which
+  // project runs this file.
   test.use({ viewport: { width: 375, height: 812 } });
 
   test("the collapsed panel does not claim a third of a phone screen", async ({ page }) => {
