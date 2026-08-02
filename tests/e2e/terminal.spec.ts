@@ -11,10 +11,16 @@ async function openTerminal(page: import("@playwright/test").Page) {
   // Ctrl+` is handled by a keydown listener wired up in a useEffect, which only attaches once
   // the client bundle hydrates. goto()'s load event fires before that under load (observed
   // flaking on the mobile project when the suite runs with several workers against a cold
-  // server), so retry the chord rather than assume the page is interactive the instant it loads.
-  // Checking visibility before each retry (rather than pressing unconditionally) keeps a slow
-  // first render from being toggled shut again by a second press. Capped at one retry: this is a
-  // hydration-timing gate, not a standing waiver for a chord that has actually become unreliable.
+  // server), so this waits for the chord to land rather than assuming the page is interactive
+  // the instant it loads. Checking visibility before each retry (rather than pressing
+  // unconditionally) keeps a slow first render from being toggled shut again by a second press.
+  //
+  // The retry itself is a hydration *gate*, not a standing waiver on the chord's reliability: a
+  // second attempt gets a chance to succeed (so a genuinely slow first render doesn't fail the
+  // test outright), but needing it at all is asserted afterward, hard. A chord silently dropped
+  // on *every* page load — not merely slow to attach once in a while — would otherwise pass
+  // this check every single time as long as the second press always worked, which is exactly
+  // the regression this asserts against.
   let attempts = 0;
   await expect(async () => {
     attempts++;
@@ -22,7 +28,7 @@ async function openTerminal(page: import("@playwright/test").Page) {
     await page.keyboard.press("Control+Backquote");
     await expect(input).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });
-  expect(attempts, "Ctrl+` needed more than one retry to open the terminal").toBeLessThanOrEqual(2);
+  expect(attempts, "Ctrl+` needed more than one attempt to open the terminal").toBe(1);
 }
 
 async function run(page: import("@playwright/test").Page, command: string) {

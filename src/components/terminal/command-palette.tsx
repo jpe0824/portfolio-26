@@ -7,15 +7,24 @@ import { allFiles } from "@/content/resolve";
 import { commands } from "@/lib/commands/registry";
 import { useCommandSurface } from "./command-surface";
 
-type Item = { kind: "file" | "command"; label: string; hint: string; run: () => void };
+// `id` is the React-key/DOM-id source of truth, kept separate from `label` (what's displayed):
+// a file's `path` is unique by construction (routing depends on it), which a file's bare
+// `name` is not — two files in different directories can share a basename. A command's `name`
+// is unique within the registry by construction too, and is what `run()` actually submits.
+type Item = { kind: "file" | "command"; id: string; label: string; hint: string; run: () => void };
+
+function optionId(index: number): string {
+  return `palette-option-${index}`;
+}
 
 // Focusable descendants in DOM order: the query input, then each rendered match button.
 // Queried fresh on every Tab press (not memoized) because the match list — and therefore
-// this set — shrinks and grows as the user types.
+// this set — shrinks and grows as the user types. Only `input`/`button` are queried: nothing
+// else in this dialog can match an `[href]` or an explicit `[tabindex]`.
 function focusableIn(root: HTMLElement): HTMLElement[] {
-  return Array.from(
-    root.querySelectorAll<HTMLElement>('input, button, [href], [tabindex]:not([tabindex="-1"])'),
-  ).filter((el) => !el.hasAttribute("disabled"));
+  return Array.from(root.querySelectorAll<HTMLElement>("input, button")).filter(
+    (el) => !el.hasAttribute("disabled"),
+  );
 }
 
 export function CommandPalette() {
@@ -27,16 +36,23 @@ export function CommandPalette() {
   const [invoker, setInvoker] = useState<Element | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Set only from event handlers (choose()), never from render — see the effect below for why
+  // this exists: restoring focus to the invoker is correct on dismissal (Esc, backdrop click,
+  // ⌘K toggled closed) but wrong after choosing an item, when the item's own action may have
+  // already, deliberately, moved focus somewhere else (e.g. into the terminal input).
+  const skipRestoreRef = useRef(false);
 
   const items = useMemo<Item[]>(() => {
     const files: Item[] = allFiles(manifest).map((file) => ({
       kind: "file",
+      id: file.path,
       label: file.name,
       hint: "open file",
       run: () => router.push(`/${file.path}`),
     }));
     const verbs: Item[] = commands.map((command) => ({
       kind: "command",
+      id: command.name,
       label: command.name,
       hint: command.summary,
       run: () => {
@@ -76,15 +92,20 @@ export function CommandPalette() {
   useEffect(() => {
     if (paletteOpen) {
       inputRef.current?.focus();
-    } else {
-      (invoker as HTMLElement | null)?.focus?.();
+      return;
     }
+    if (skipRestoreRef.current) {
+      skipRestoreRef.current = false;
+      return;
+    }
+    (invoker as HTMLElement | null)?.focus?.();
   }, [paletteOpen, invoker]);
 
   if (!paletteOpen) return null;
 
   function choose(item: Item | undefined) {
     if (!item) return;
+    skipRestoreRef.current = true;
     setPaletteOpen(false);
     item.run();
   }
@@ -112,17 +133,25 @@ export function CommandPalette() {
     const first = focusables[0];
     const last = focusables[focusables.length - 1];
     const forward = !event.shiftKey;
-    const current = document.activeElement;
-    const atBoundary = forward ? current === last : current === first;
-    if (atBoundary || !dialog.contains(current)) {
+    // The trap means focus can never be anywhere but inside this dialog while it's open, so
+    // the only real question is whether it's currently at the edge that would otherwise let
+    // Tab walk out of the trap.
+    const atBoundary = forward ? document.activeElement === last : document.activeElement === first;
+    if (atBoundary) {
       event.preventDefault();
       (forward ? first : last).focus();
     }
   }
 
+  const activeId = active >= 0 && active < matches.length ? optionId(active) : undefined;
+  // Deliberately worded differently from the visible "no matches" text below (not "no
+  // matches"/"0 matches"): both live in the dialog at once, and an identical string would make
+  // `getByText("no matches")` ambiguous between the visible message and this sr-only one.
+  const resultsAnnouncement = `${matches.length} result${matches.length === 1 ? "" : "s"}`;
+
   return (
     <div
-      className="fixed inset-0 z-40 flex items-start justify-center bg-base/70 pt-24"
+      className="fixed inset-0 z-40 flex items-start justify-center bg-base/70 px-4 pt-10 pb-4"
       onClick={() => setPaletteOpen(false)}
     >
       <div
@@ -132,14 +161,19 @@ export function CommandPalette() {
         aria-label="Command palette"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={onDialogKeyDown}
-        className="w-[min(36rem,90vw)] overflow-hidden rounded border border-edge-strong bg-panel"
+        className="flex max-h-full w-[min(36rem,90vw)] flex-col overflow-hidden rounded border border-edge-strong bg-panel"
       >
-        <div className="flex items-baseline gap-2 border-b border-edge px-3 py-2">
+        <div className="flex shrink-0 items-baseline gap-2 border-b border-edge px-3 py-2">
           <span className="text-cyan" aria-hidden="true">
             ❯
           </span>
           <input
             ref={inputRef}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="palette-listbox"
+            aria-autocomplete="list"
+            aria-activedescendant={activeId}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -166,24 +200,56 @@ export function CommandPalette() {
           />
         </div>
 
-        <ul className="list-none py-1">
+        {/* min-h-0 lets this shrink below its content height inside the flex column, which is
+            what makes overflow-y-auto actually kick in instead of the list just pushing the
+            dialog (and the row a Tab lands on) past the bottom of a short viewport — a real
+            failure mode at landscape-phone heights, where ten rows plus the header don't fit. */}
+        <ul
+          id="palette-listbox"
+          role="listbox"
+          aria-label="Command palette results"
+          className="min-h-0 flex-1 list-none overflow-y-auto py-1"
+        >
           {matches.map((item, i) => (
-            <li key={`${item.kind}:${item.label}`}>
+            <li key={`${item.kind}:${item.id}`} role="presentation">
               <button
+                id={optionId(i)}
                 type="button"
+                role="option"
+                aria-selected={i === active}
                 onClick={() => choose(item)}
                 onMouseEnter={() => setActive(i)}
+                onFocus={() => setActive(i)}
                 className={`flex w-full items-baseline gap-3 px-3 py-1 text-left ${
                   i === active ? "bg-primary-dim text-fg" : "text-fg-muted"
                 }`}
               >
                 <span className="truncate">{item.label}</span>
-                <span className="ml-auto shrink-0 text-fg-muted opacity-70">{item.hint}</span>
+                {/* The active row's own opacity-70 dimming was measured at 3.89:1 against
+                    bg-primary-dim — below the 4.5:1 AA floor for real content (this is the
+                    command summary, not a decoration). Full-strength text-fg on the active row
+                    only clears that; non-active rows keep the dimmer 4.71:1-passing style. */}
+                <span
+                  className={`ml-auto shrink-0 ${
+                    i === active ? "text-fg" : "text-fg-muted opacity-70"
+                  }`}
+                >
+                  {item.hint}
+                </span>
               </button>
             </li>
           ))}
-          {matches.length === 0 ? <li className="px-3 py-1 text-fg-muted">no matches</li> : null}
         </ul>
+        {matches.length === 0 ? (
+          <p className="shrink-0 px-3 py-1 text-fg-muted">no matches</p>
+        ) : null}
+        {/* Arrow-key navigation moves aria-activedescendant above without ever moving real DOM
+            focus off the input, so a screen reader announces the newly-active option's name —
+            but not how many results there are, or that "no matches" is a live count rather than
+            static text. This mirrors that count back explicitly. */}
+        <p aria-live="polite" className="sr-only">
+          {resultsAnnouncement}
+        </p>
       </div>
     </div>
   );
