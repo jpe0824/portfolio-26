@@ -39,3 +39,19 @@ test("the terminal is absent without JavaScript", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("region", { name: "Terminal" })).toBeHidden();
 });
+
+test("the empty state has no dead shortcut rows without JavaScript", async ({ page }) => {
+  // toBeHidden() alone would also pass if the button were never rendered at all, which isn't the
+  // property this test needs: the row is meant to exist in markup (so it still counts as content,
+  // and snaps into place the instant JS does load) but be display:none via .no-js .js-only while
+  // there's no handler to make it do anything. A plain getByRole("button", ...) can't tell those
+  // two cases apart either — Chromium's accessibility tree drops display:none nodes, so the
+  // locator itself resolves to zero matches once .js-only hides the row, the same as if the row
+  // had been deleted outright. `includeHidden: true` is required to make the existence check
+  // actually exercise "hidden", not "absent".
+  await page.goto("/");
+  const paletteRow = page.getByRole("button", { name: "command palette", includeHidden: true });
+  await expect(paletteRow).toHaveCount(1);
+  await expect(paletteRow).toBeHidden();
+  await expect(page.getByRole("main").getByText("select a file to begin")).toBeVisible();
+});

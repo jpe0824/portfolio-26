@@ -1,4 +1,5 @@
 import { JeMark } from "./je-mark";
+import { ShortcutRow } from "./shortcut-row";
 
 export function EmptyState() {
   return (
@@ -9,6 +10,11 @@ export function EmptyState() {
         <p className="text-fg-muted" aria-hidden="true">
           jason edman
         </p>
+      </div>
+      <div className="js-only flex flex-col items-start gap-1">
+        <ShortcutRow keys="⌘K" label="command palette" action="palette" />
+        <ShortcutRow keys="⌃`" label="toggle terminal" action="terminal" />
+        <ShortcutRow keys="?" label="help" action="help" />
       </div>
       <p className="text-fg-muted">select a file to begin</p>
     </div>
