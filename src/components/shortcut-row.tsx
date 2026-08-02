@@ -22,10 +22,20 @@ export function ShortcutRow({
     }
   }
 
+  // Only the terminal row is a disclosure control — it toggles #terminal-body (always rendered,
+  // per Task 9), so it alone gets aria-expanded/aria-controls. The palette and help rows don't
+  // disclose anything in place, so giving them the same attributes would be a false state
+  // announcement to assistive tech.
+  const disclosureProps =
+    action === "terminal"
+      ? { "aria-expanded": terminalOpen, "aria-controls": "terminal-body" }
+      : {};
+
   return (
     <button
       type="button"
       onClick={onClick}
+      {...disclosureProps}
       className="flex w-64 items-center gap-4 rounded px-3 py-1.5 text-fg-muted hover:bg-elevated hover:text-fg"
     >
       {/* The key chip is meaningless on a phone, so it only appears where the key exists.

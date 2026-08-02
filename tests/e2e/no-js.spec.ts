@@ -49,6 +49,16 @@ test("the empty state has no dead shortcut rows without JavaScript", async ({ pa
   // locator itself resolves to zero matches once .js-only hides the row, the same as if the row
   // had been deleted outright. `includeHidden: true` is required to make the existence check
   // actually exercise "hidden", not "absent".
+  //
+  // Deliberately no `exact: true` here: per the accname spec, a display:none element's computed
+  // accessible name is empty, so an exact-name match against a forced-hidden node can never
+  // succeed no matter what text is inside it — verified directly by temporarily adding
+  // `exact: true` to this same locator and watching `toHaveAccessibleName` report `Received: ""`
+  // for this exact node. The exact-name leak this task guards against only matters once the row
+  // is genuinely visible, which is what the `toHaveAccessibleName` assertions in
+  // empty-state.spec.ts (run under the desktop/mobile projects, where the row actually renders)
+  // exist to catch. This test's job is narrower: prove the row still exists in markup and stays
+  // hidden without JavaScript.
   await page.goto("/");
   const paletteRow = page.getByRole("button", { name: "command palette", includeHidden: true });
   await expect(paletteRow).toHaveCount(1);
