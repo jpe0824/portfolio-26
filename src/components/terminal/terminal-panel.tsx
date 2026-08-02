@@ -3,13 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 import { displayPath } from "@/lib/commands/registry";
 import { useCommandSurface } from "./command-surface";
+import type { OutputLine } from "@/lib/commands/types";
 
-const TONE: Record<string, string> = {
+const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
   default: "text-fg-muted",
   dim: "text-fg-muted opacity-70",
   accent: "text-cyan",
   error: "text-red",
 };
+
+// Applied to every scrollback line (both the echoed prompt and command output):
+// `whitespace-pre-wrap` preserves the indentation `tree` and the column alignment `help`
+// build with repeated spaces — normal whitespace collapsing flattens both to a single space,
+// which erases the only thing `tree` communicates (nesting depth). `min-h-[1lh]` gives a
+// genuinely empty line (a blank line in a cat'd file) a line box: an empty paragraph with no
+// text node at all does not generate one on its own, `pre-wrap` or not, so blank lines would
+// otherwise collapse to zero height and the output would no longer match the file.
+const LINE = "whitespace-pre-wrap min-h-[1lh]";
 
 export function TerminalPanel() {
   const { terminalOpen, setTerminalOpen, cwd, entries, history, submit, completeInput } =
@@ -19,9 +29,18 @@ export function TerminalPanel() {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
 
   useEffect(() => {
-    if (terminalOpen) inputRef.current?.focus();
+    if (terminalOpen) {
+      inputRef.current?.focus();
+    } else if (wasOpenRef.current) {
+      // Only on a genuine open->close transition, not on first mount — otherwise the toggle
+      // button would steal focus from the skip link at initial page load.
+      toggleRef.current?.focus();
+    }
+    wasOpenRef.current = terminalOpen;
   }, [terminalOpen]);
 
   useEffect(() => {
@@ -30,9 +49,12 @@ export function TerminalPanel() {
   }, [entries]);
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    // Tab only completes a non-empty prompt. On an empty one it moves focus as
-    // usual, so a keyboard user is never trapped in the terminal.
-    if (event.key === "Tab" && input !== "") {
+    // Tab only completes a non-empty prompt, and only the forward direction — Shift+Tab must
+    // still egress backward. Without the shiftKey guard, both directions on a non-empty prompt
+    // ran completion and preventDefault, leaving no backward keyboard exit from the terminal at
+    // all. `.trim()` (not a bare emptiness check) matches complete()'s own guard, so a
+    // whitespace-only prompt is treated the same as a truly empty one.
+    if (event.key === "Tab" && !event.shiftKey && input.trim() !== "") {
       event.preventDefault();
       setInput(completeInput(input));
       return;
@@ -71,6 +93,7 @@ export function TerminalPanel() {
     >
       <div className="flex h-8 shrink-0 items-center gap-3 px-3">
         <button
+          ref={toggleRef}
           type="button"
           aria-expanded={terminalOpen}
           aria-controls="terminal-body"
@@ -84,47 +107,63 @@ export function TerminalPanel() {
         </span>
       </div>
 
-      {terminalOpen ? (
-        <div id="terminal-body" className="flex h-[35dvh] min-h-32 flex-col border-t border-edge">
-          <div ref={scrollRef} aria-live="polite" className="min-h-0 flex-1 overflow-auto px-3 py-2">
-            {entries.map((entry) => (
-              <div key={entry.id}>
-                {entry.prompt ? <p className="text-fg">{entry.prompt}</p> : null}
-                {entry.lines.map((line, i) => (
-                  <p key={i} className={TONE[line.tone ?? "default"]}>
-                    {line.text}
-                  </p>
-                ))}
-              </div>
-            ))}
-          </div>
-
-          <form
-            className="flex shrink-0 items-baseline gap-2 border-t border-edge px-3 py-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              const value = input;
-              setInput("");
-              setCursor(null);
-              void submit(value);
-            }}
-          >
-            <span className="shrink-0 text-cyan" aria-hidden="true">
-              {displayPath(cwd)} ❯
-            </span>
-            <input
-              ref={inputRef}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={onKeyDown}
-              aria-label="Terminal input"
-              autoComplete="off"
-              spellCheck={false}
-              className="min-w-0 flex-1 bg-transparent text-fg outline-none"
-            />
-          </form>
+      {/* Always rendered, visibility toggled via `hidden` — not conditionally mounted. A
+          conditionally-mounted body means aria-controls="terminal-body" is an unresolvable IDREF
+          in the collapsed state (the default at first paint), which is invalid ARIA. It also
+          means the aria-live region is destroyed and recreated on every toggle, so it re-mounts
+          already populated with the whole scrollback — the exact case that makes some screen
+          readers announce everything at once instead of just the new line. Keeping it mounted
+          avoids both. `hidden` and the flex/hidden className swap agree with each other rather
+          than fighting over `display`, so the collapsed state can't be defeated by utility
+          specificity. */}
+      <div
+        id="terminal-body"
+        hidden={!terminalOpen}
+        className={
+          terminalOpen ? "flex h-[35dvh] min-h-32 flex-col border-t border-edge" : "hidden"
+        }
+      >
+        <div ref={scrollRef} role="log" className="min-h-0 flex-1 overflow-auto px-3 py-2">
+          {entries.map((entry) => (
+            <div key={entry.id}>
+              {entry.prompt ? <p className={`${LINE} text-fg`}>{entry.prompt}</p> : null}
+              {entry.lines.map((line, i) => (
+                <p key={i} className={`${LINE} ${TONE[line.tone ?? "default"]}`}>
+                  {line.text}
+                </p>
+              ))}
+            </div>
+          ))}
         </div>
-      ) : null}
+
+        <form
+          className="flex shrink-0 items-baseline gap-2 border-t border-edge px-3 py-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const value = input;
+            setInput("");
+            setCursor(null);
+            void submit(value);
+          }}
+        >
+          <span className="shrink-0 text-cyan" aria-hidden="true">
+            {displayPath(cwd)} ❯
+          </span>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={onKeyDown}
+            // The cwd is otherwise invisible to assistive tech: the prompt span above is
+            // aria-hidden (it's a visual glyph, `❯`, not meant to be read), and a static label
+            // would give a screen-reader user no signal that `cd` changed the working directory.
+            aria-label={`Terminal input (${displayPath(cwd)})`}
+            autoComplete="off"
+            spellCheck={false}
+            className="min-w-0 flex-1 bg-transparent text-fg"
+          />
+        </form>
+      </div>
     </section>
   );
 }
