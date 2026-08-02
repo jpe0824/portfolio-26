@@ -23,7 +23,7 @@ describe("redactText", () => {
   });
 
   it("handles a typographic apostrophe", () => {
-    expect(redactText("Jason's stack")).toBe("His stack");
+    expect(redactText("Jason’s stack")).toBe("His stack");
   });
 
   it("leaves the name inside a URL untouched", () => {
@@ -88,6 +88,15 @@ describe("createRedactor", () => {
     // "Jason" could still grow into "Jason Edman", so it must not be emitted yet.
     expect(emitted).not.toContain("Jason");
     expect(emitted + redactor.flush()).toBe("He is he");
+  });
+
+  it("redacts a name split across an unbounded whitespace gap", () => {
+    // The fixed 32-char WINDOW was insufficient: a large gap between "Jason" and "Edman"
+    // would cause the surname to leak. This tests that the new unbounded-scan approach
+    // catches the name no matter how wide the gap.
+    const source = "Text with Jason" + " ".repeat(40) + "Edman finished.";
+    const expected = "Text with he finished.";
+    expect(run([source.slice(0, 20), source.slice(20)])).toBe(expected);
   });
 
   it("reproduces the input exactly when nothing matches, across many chunks", () => {

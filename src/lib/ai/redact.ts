@@ -12,41 +12,40 @@
  * `jason` and `edman` inside that slug, so the pattern cannot match it, and no URL special
  * case is needed anywhere in this file.
  */
-const NAME = /\bJason(?:\s+Edman)?(?:['']s)?\b/gi;
-
-/** Longest real match, `Jason Edman's`. Nothing beyond this can be a partial match. */
-const LONGEST = "Jason Edman's".length;
+const NAME = /\bJason(?:\s+Edman)?(?:['’']s)?\b/gi;
 
 /**
- * How far back the streaming filter inspects for a partial match. Larger than LONGEST so that
- * a name separated by more whitespace than usual (`Jason   Edman`) is still caught mid-stream.
- * A gap wider than this would be emitted unredacted, which no model produces in practice.
+ * How far back to look for a bare prefix of "jason" at the very end of the buffer.
+ * Longer than the bare prefix would naturally grow, but short enough to avoid false positives.
  */
-const WINDOW = 32;
+const PREFIX_WINDOW = 5;
 
-/** Tails that could still grow into a match once more text arrives. */
-const PARTIAL = /^jason\s*(?:e|ed|edm|edma|edman)?['']?s?$/i;
-
-function pronounFor(match: string, ...rest: any[]): string {
-  const offset = rest[rest.length - 2];
-  const string = rest[rest.length - 1];
-
-  const possessive = /['']s$/.test(match);
-
-  // Capitalize if at the start of string or after a sentence boundary (skipping spaces).
-  let capitalized = offset === 0;
-  if (!capitalized && offset > 0) {
-    let checkPos = offset - 1;
-    // Skip back over spaces, but not newlines (newlines are boundaries themselves).
-    while (checkPos >= 0 && string[checkPos] === " ") {
-      checkPos--;
-    }
-    if (checkPos >= 0) {
-      capitalized = string[checkPos] === "." || string[checkPos] === "\n";
-    } else {
-      capitalized = true; // Only spaces before this.
-    }
+/**
+ * Determine if a match should be capitalized based on what precedes it.
+ * Precedence is a sentence boundary (. or \n), skipping spaces; otherwise, use the given fallback.
+ */
+function shouldCapitalize(offset: number, string: string, precedingChar: string | null): boolean {
+  if (offset === 0) {
+    // At the start of the string being redacted; use the fallback (last emitted char or start-of-all).
+    return precedingChar === "" || precedingChar === "." || precedingChar === "\n" || precedingChar === null;
   }
+
+  // Within the string; skip back over spaces to find a sentence boundary.
+  let checkPos = offset - 1;
+  while (checkPos >= 0 && string[checkPos] === " ") {
+    checkPos--;
+  }
+  if (checkPos >= 0) {
+    return string[checkPos] === "." || string[checkPos] === "\n";
+  }
+
+  // Only spaces before this; use the fallback.
+  return precedingChar === "" || precedingChar === "." || precedingChar === "\n" || precedingChar === null;
+}
+
+function pronounFor(match: string, offset: number, string: string): string {
+  const possessive = /['’']s$/.test(match);
+  const capitalized = shouldCapitalize(offset, string, null);
 
   if (possessive) return capitalized ? "His" : "his";
   return capitalized ? "He" : "he";
@@ -66,42 +65,47 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
   let buffer = "";
   let lastChar = "";
 
-  /** Index at which it is safe to cut: no completed match straddles it, none could start after. */
+  /**
+   * Index at which it is safe to cut: no completed match straddles it, none could start after.
+   * Strategy: look for the last occurrence of "jason" in the buffer. If found, check that
+   * everything after it is whitespace + optional partial "edman" + optional possessive.
+   * Also check for a bare prefix of "jason" at the very end (up to PREFIX_WINDOW length).
+   */
   function safeCut(): number {
-    const reach = Math.min(buffer.length, WINDOW);
+    const lowerBuffer = buffer.toLowerCase();
+
+    // Look for the last occurrence of "jason".
+    const lastJasonIndex = lowerBuffer.lastIndexOf("jason");
+    if (lastJasonIndex !== -1) {
+      // Everything after "jason" (5 chars).
+      const afterJason = buffer.slice(lastJasonIndex + 5);
+      // Check if it’s all whitespace + optional partial edman + optional possessive.
+      // PARTIAL tests "jason" at the start, but we need to test what comes after.
+      // Strip the leading "jason" and test the tail: space + optional edman + optional possessive.
+      if (/^\s*(?:e|ed|edm|edma|edman)?[‘’’]?s?$/i.test(afterJason)) {
+        // Safe to cut before "jason".
+        return lastJasonIndex;
+      }
+    }
+
+    // Also check for a bare prefix of "jason" at the very end of the buffer.
+    const reach = Math.min(buffer.length, PREFIX_WINDOW);
     for (let back = reach; back >= 1; back--) {
       const tail = buffer.slice(buffer.length - back);
-      if ("jason".startsWith(tail.toLowerCase()) || PARTIAL.test(tail)) {
+      if ("jason".startsWith(tail.toLowerCase())) {
+        // Could still be growing into "jason".
         return buffer.length - back;
       }
     }
+
+    // Nothing could grow into a match.
     return buffer.length;
   }
 
   function redactWithContext(text: string): string {
-    return text.replace(NAME, (match: string, ...rest: any[]) => {
-      const offset = rest[rest.length - 2];
-      const string = rest[rest.length - 1];
-
-      const possessive = /['']s$/.test(match);
-
-      let capitalized;
-      if (offset === 0) {
-        // At the start of this chunk; use what we've seen before.
-        capitalized = lastChar === "" || lastChar === "." || lastChar === "\n";
-      } else {
-        // Within this chunk; skip back over spaces to find a sentence boundary.
-        let checkPos = offset - 1;
-        while (checkPos >= 0 && string[checkPos] === " ") {
-          checkPos--;
-        }
-        if (checkPos >= 0) {
-          capitalized = string[checkPos] === "." || string[checkPos] === "\n";
-        } else {
-          // Only spaces before this; check what came before the chunk.
-          capitalized = lastChar === "" || lastChar === "." || lastChar === "\n";
-        }
-      }
+    return text.replace(NAME, (match: string, offset: number, string: string) => {
+      const possessive = /['’']s$/.test(match);
+      const capitalized = shouldCapitalize(offset, string, lastChar || null);
 
       if (possessive) return capitalized ? "His" : "his";
       return capitalized ? "He" : "he";
