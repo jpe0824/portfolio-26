@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { TerminalFrame } from "@/components/terminal-frame";
+import { SITE_URL } from "@/lib/site";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -10,6 +11,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  // Resolves relative URLs in any generated metadata (canonical, Open Graph) against
+  // the custom domain rather than whatever host served the request — otherwise the
+  // *.vercel.app alias advertises itself as canonical for the same content.
+  metadataBase: new URL(SITE_URL),
   title: "jason edman",
   description: "Jason Edman, senior software engineer.",
 };

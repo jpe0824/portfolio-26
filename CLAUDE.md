@@ -198,6 +198,22 @@ Indexing is enabled. `src/app/layout.tsx` sets no `robots` directive, so pages a
 default. A `noindex` was in place while the site carried placeholder copy and came off on 2026-07-31
 once real content landed.
 
+`src/app/robots.ts` and `src/app/sitemap.ts` are Next metadata routes, prerendered like any other
+static asset. Both take the origin from `src/lib/site.ts` — **that constant, `metadataBase`, and the
+domain Vercel serves must agree**, or the `*.vercel.app` alias and `jsonedman.dev` look like two
+origins holding duplicate content.
+
+- **The sitemap is generated from the manifest**, using the same `["", ...allPaths(manifest)]`
+  expression as `generateStaticParams`. Adding a manifest entry adds a sitemap entry. Never hand-list
+  routes. `tests/e2e/seo.spec.ts` asserts the served XML matches the manifest exactly in both
+  directions, so a dropped route and a stale one both fail.
+- **No `lastModified`, `changeFrequency`, or `priority`.** A fresh checkout resets file mtimes, so any
+  build-time date would claim the whole site changed on every deploy; crawlers discount a `lastmod`
+  that always reads "now", which is worse than omitting it. Google ignores the other two outright.
+- **`/content-index.json` is disallowed** in `robots.txt`. It is the terminal's data source, holding
+  every content file's full text — indexing it would put a duplicate of the entire site into results
+  as one unreadable blob. Blocking crawlers does not affect the browser fetch `cat` and `grep` use.
+
 Deployment Protection is a separate axis and is unchanged. The project's setting is
 `ssoProtection: all_except_custom_domains`, a `jason-personal` team default for new projects rather
 than a blanket "off". The raw `*.vercel.app` alias requires Vercel SSO login; the custom domain
