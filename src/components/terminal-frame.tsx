@@ -2,6 +2,7 @@ import { StatusBar } from "./status-bar";
 import { TopBar } from "./top-bar";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
 import { CommandSurface } from "./terminal/command-surface";
+import { TerminalPanel } from "./terminal/terminal-panel";
 
 export function TerminalFrame({
   explorer,
@@ -23,12 +24,13 @@ export function TerminalFrame({
         <MobileNavDrawer />
         <div className="flex min-h-0 flex-1">
           {explorer}
-          {/* Content column. Task 9 adds <TerminalPanel/> here as a sibling of <main>,
-              deliberately outside it so getByRole("main") stays a clean content scope. */}
+          {/* Content column. TerminalPanel is a sibling of <main>, deliberately outside it
+              so getByRole("main") stays a clean content scope for the rest of the suite. */}
           <div className="flex min-w-0 flex-1 flex-col">
             <main id="file-content" className="flex min-h-0 flex-1 flex-col">
               {children}
             </main>
+            <TerminalPanel />
           </div>
         </div>
         <StatusBar />

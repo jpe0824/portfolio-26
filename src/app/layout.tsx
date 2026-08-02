@@ -27,8 +27,12 @@ export default function RootLayout({
   explorer: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={jetbrainsMono.variable}>
+    <html lang="en" className={`${jetbrainsMono.variable} no-js`}>
       <body>
+        {/* Removed during parse, before the frame paints, so JS-only controls never
+            flash. With JS off the class stays and .js-only stays hidden — the
+            terminal is absent rather than present and dead. */}
+        <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         <TerminalFrame explorer={explorer}>{children}</TerminalFrame>
       </body>
     </html>

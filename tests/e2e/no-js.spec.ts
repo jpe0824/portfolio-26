@@ -34,3 +34,8 @@ test("the mobile drawer opens without JavaScript", async ({ page }) => {
     page.getByRole("navigation", { name: "Files" }).getByRole("link", { name: "whoami.md" }),
   ).toBeVisible();
 });
+
+test("the terminal is absent without JavaScript", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Terminal" })).toBeHidden();
+});
