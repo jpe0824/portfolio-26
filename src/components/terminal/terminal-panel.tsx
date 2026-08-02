@@ -22,7 +22,7 @@ const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
 const LINE = "whitespace-pre-wrap min-h-[1lh]";
 
 export function TerminalPanel() {
-  const { terminalOpen, setTerminalOpen, cwd, entries, history, submit, completeInput } =
+  const { terminalOpen, setTerminalOpen, cwd, entries, history, submit, completeInput, focusRequest } =
     useCommandSurface();
   const [input, setInput] = useState("");
   const [cursor, setCursor] = useState<number | null>(null);
@@ -41,7 +41,11 @@ export function TerminalPanel() {
       toggleRef.current?.focus();
     }
     wasOpenRef.current = terminalOpen;
-  }, [terminalOpen]);
+    // focusRequest is a counter, not a state mirror: runInTerminal bumps it on every dispatch so
+    // this effect also runs when the panel was ALREADY open, where `terminalOpen` alone never
+    // changes and focus would otherwise stay wherever the caller left it (on <body>, after the
+    // palette closes).
+  }, [terminalOpen, focusRequest]);
 
   useEffect(() => {
     const node = scrollRef.current;

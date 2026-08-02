@@ -210,6 +210,85 @@ test("choosing a command that relocates focus is not overridden by the invoker r
   await expect(invoker).not.toBeFocused();
 });
 
+test("choosing a file leaves focus somewhere real rather than on the body", async ({ page }) => {
+  // Opening a file is the palette's headline action, and it was the one path with no coverage.
+  // Nothing about router.push moves focus, so the palette's own invoker restore is what has to
+  // catch it; an unconditional skipRestore left focus on <body> — no selected element, Tab and
+  // the arrow keys starting again from the top of the document.
+  await page.goto("/");
+  const invoker = page.getByRole("button", { name: "TERMINAL", exact: true });
+  await invoker.focus();
+  await expect(invoker).toBeFocused();
+
+  await openPalette(page);
+  await paletteInput(page).fill("who");
+  await paletteInput(page).press("Enter");
+
+  await expect(page).toHaveURL("/whoami");
+  await expect(palette(page)).toBeHidden();
+  await expect(invoker).toBeFocused();
+  expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("BODY");
+});
+
+test("choosing a command focuses the terminal input even when the panel is already open", async ({
+  page,
+}) => {
+  // The terminal is opened FIRST, deliberately. The earlier version of this fix worked only
+  // because setTerminalOpen(true) was a real state change, which re-ran the panel's focus effect;
+  // with the panel already open that effect never re-runs, nothing catches focus after the palette
+  // unmounts, and the restore is skipped — so focus lands on <body>. The sibling test above runs
+  // the terminal-closed path, which is why that one passed all along.
+  await page.goto("/");
+  await page.getByRole("button", { name: "toggle terminal", exact: true }).click();
+  const input = term(page).getByLabel("Terminal input");
+  await expect(input).toBeVisible();
+
+  const invoker = page.getByRole("button", { name: "TERMINAL", exact: true });
+  await invoker.focus();
+  await expect(invoker).toBeFocused();
+
+  await openPalette(page);
+  await paletteInput(page).fill("tree");
+  await paletteInput(page).press("Enter");
+
+  await expect(palette(page)).toBeHidden();
+  await expect(input).toBeFocused();
+});
+
+test("the terminal chord is inert while the palette is open, so escape still works", async ({
+  page,
+}) => {
+  // ⌃` opening the terminal from under the modal pulls focus out of a live role="dialog"
+  // aria-modal="true". Escape is bound on the dialog wrapper, so once focus is outside it the key
+  // reaches nothing and the palette can no longer be dismissed at all — measured as three Escape
+  // presses with the palette still open.
+  await page.goto("/");
+  await openPalette(page);
+  await page.keyboard.press("Control+Backquote");
+  await expect(term(page).getByLabel("Terminal input")).toBeHidden();
+
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
+});
+
+test("? does not run help from behind the palette when focus is on a match row", async ({
+  page,
+}) => {
+  // The `?` binding's guard only recognises INPUT/TEXTAREA/contentEditable as "typing". A palette
+  // match row is a <button>, so Tab onto one and `?` fired straight through — running help in a
+  // terminal opened behind the overlay, and taking focus out of the trap with it.
+  await page.goto("/");
+  await openPalette(page);
+  await page.keyboard.press("Tab");
+  await expect(palette(page).getByRole("option").first()).toBeFocused();
+
+  await page.keyboard.press("?");
+  await expect(term(page).getByLabel("Terminal input")).toBeHidden();
+
+  await page.keyboard.press("Escape");
+  await expect(palette(page)).toBeHidden();
+});
+
 test("tab cycles forward through the dialog and wraps back to the input", async ({ page }) => {
   await page.goto("/");
   await openPalette(page);

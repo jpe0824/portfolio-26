@@ -1,5 +1,43 @@
 import { expect, test } from "@playwright/test";
 
+async function scrollEmptyRegionTo(page: import("@playwright/test").Page, where: "top" | "bottom") {
+  await page.evaluate((edge) => {
+    // <main>'s only child at the root route is the empty state's own box. Every landscape
+    // assertion below is made against THIS element rather than against <main>, because main is
+    // overflow:visible — a child that spills out of it neither clips nor scrolls, it simply paints
+    // outside, where the opaque top bar, terminal header and status bar cover it.
+    const region = document.querySelector("main > div");
+    if (region) region.scrollTop = edge === "top" ? 0 : region.scrollHeight;
+  }, where);
+}
+
+// toBeVisible() proves neither of the two things that matter here: it checks that the element has
+// a non-empty box and is not `display:none`, and says nothing about whether that box is inside its
+// container, inside the viewport, or covered by something opaque. An element painted 22px below
+// its parent and underneath the terminal header passes toBeVisible() — which is how the suite
+// stayed green through a defect that put the mark at y = -12.9. So: measure containment against
+// the region, and hit-test the element at its own centre.
+async function placement(target: import("@playwright/test").Locator) {
+  return target.evaluate((el) => {
+    const region = document.querySelector("main > div");
+    if (!region) return null;
+    const box = region.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+    return {
+      insideRegion: rect.top >= box.top - 1 && rect.bottom <= box.bottom + 1,
+      insideViewport: rect.top >= -1 && rect.bottom <= window.innerHeight + 1,
+      // elementFromPoint returns the innermost painted node, which for a wrapper is one of its own
+      // children — hence containment in both directions rather than identity.
+      hitTestable: !!hit && (hit === el || el.contains(hit) || hit.contains(el)),
+      // Named so a failure reports what covered it, not merely "false".
+      coveredBy: hit ? `${hit.tagName}.${String(hit.className ?? "")}`.slice(0, 70) : "nothing",
+      top: +rect.top.toFixed(1),
+      bottom: +rect.bottom.toFixed(1),
+    };
+  });
+}
+
 test("no tab strip is shown when no file is open", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: /^Close / })).toHaveCount(0);
@@ -109,6 +147,70 @@ test("the toggle-terminal row announces panel state, the other rows don't", asyn
   await expect(page.getByRole("button", { name: "help", exact: true })).not.toHaveAttribute(
     "aria-expanded",
   );
+});
+
+// The suite had no landscape-phone coverage of any kind, and landscape is the shape that breaks
+// first: 375px of height, less the top bar, status bar and terminal header, leaves the empty state
+// under 240px for ~260px of content — before the visitor presses the shortcut this very screen
+// advertises, which takes another 35dvh away.
+//
+// These assertions are deliberately not toBeVisible(): see placement() above. They fail against
+// each of the three wrong versions of this component — plain `justify-center` with no overflow
+// handling (content leaves the box at both ends), `justify-center` plus `overflow-auto` (the top
+// overflow sits at a negative offset that scrollTop 0 cannot reach), and `justify-center-safe`
+// with no `overflow-auto` (the bottom overflow is start-aligned but still unscrollable).
+test.describe("landscape phone", () => {
+  test.use({ viewport: { width: 667, height: 375 } });
+
+  for (const terminal of ["collapsed", "open"] as const) {
+    test(`the empty state stays inside its own box and scrolls, terminal ${terminal}`, async ({
+      page,
+    }) => {
+      await page.goto("/");
+      if (terminal === "open") {
+        await page.getByRole("button", { name: "toggle terminal", exact: true }).click();
+        await expect(
+          page.getByRole("region", { name: "Terminal" }).getByLabel("Terminal input"),
+        ).toBeVisible();
+      }
+
+      const main = page.getByRole("main");
+      const mark = main.getByRole("img", { name: "jason edman" });
+      const tagline = main.getByText("select a file to begin");
+
+      // Top of the region: the mark is the first thing in the flow, so it is what a centred
+      // overflow pushes to a negative offset, through the top bar.
+      await scrollEmptyRegionTo(page, "top");
+      const top = await placement(mark);
+      expect(top, "the empty-state region should exist").not.toBeNull();
+      expect(top!.insideRegion, `mark escaped its box: top=${top!.top} bottom=${top!.bottom}`).toBe(
+        true,
+      );
+      expect(top!.insideViewport, `mark outside the viewport: top=${top!.top}`).toBe(true);
+      expect(top!.hitTestable, `mark covered by ${top!.coveredBy}`).toBe(true);
+
+      // Bottom of the region: the last line is what a centred overflow spills past the bottom
+      // edge, under the terminal header. It must be reachable by scrolling THIS region.
+      await scrollEmptyRegionTo(page, "bottom");
+      const bottom = await placement(tagline);
+      expect(
+        bottom!.insideRegion,
+        `"select a file to begin" escaped its box: top=${bottom!.top} bottom=${bottom!.bottom}`,
+      ).toBe(true);
+      expect(bottom!.insideViewport, `"select a file to begin" outside the viewport`).toBe(true);
+      expect(bottom!.hitTestable, `"select a file to begin" covered by ${bottom!.coveredBy}`).toBe(
+        true,
+      );
+
+      // The interior pane scrolls; the page still must not. Note this assertion alone cannot fail
+      // here — body{overflow:hidden} plus h-[100dvh] make it structurally invariant — which is
+      // precisely why it is not the assertion this test relies on.
+      const pageScrolls = await page.evaluate(
+        () => document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+      );
+      expect(pageScrolls).toBe(false);
+    });
+  }
 });
 
 test.describe("phone viewport", () => {

@@ -11,7 +11,19 @@ import { useCommandSurface } from "./command-surface";
 // a file's `path` is unique by construction (routing depends on it), which a file's bare
 // `name` is not — two files in different directories can share a basename. A command's `name`
 // is unique within the registry by construction too, and is what `run()` actually submits.
-type Item = { kind: "file" | "command"; id: string; label: string; hint: string; run: () => void };
+type Item = {
+  kind: "file" | "command";
+  id: string;
+  label: string;
+  hint: string;
+  /**
+   * Whether `run` moves focus itself. Only actions that do may skip the invoker restore — see
+   * choose(). Commands go through runInTerminal, which focuses the terminal input; a file choice
+   * only changes the route, so nothing would catch focus if the restore were skipped there too.
+   */
+  relocatesFocus: boolean;
+  run: () => void;
+};
 
 function optionId(index: number): string {
   return `palette-option-${index}`;
@@ -29,7 +41,7 @@ function focusableIn(root: HTMLElement): HTMLElement[] {
 
 export function CommandPalette() {
   const router = useRouter();
-  const { paletteOpen, setPaletteOpen, setTerminalOpen, submit } = useCommandSurface();
+  const { paletteOpen, setPaletteOpen, runInTerminal } = useCommandSurface();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [wasOpen, setWasOpen] = useState(paletteOpen);
@@ -38,8 +50,8 @@ export function CommandPalette() {
   const inputRef = useRef<HTMLInputElement>(null);
   // Set only from event handlers (choose()), never from render — see the effect below for why
   // this exists: restoring focus to the invoker is correct on dismissal (Esc, backdrop click,
-  // ⌘K toggled closed) but wrong after choosing an item, when the item's own action may have
-  // already, deliberately, moved focus somewhere else (e.g. into the terminal input).
+  // ⌘K toggled closed) and after choosing an item whose action leaves focus alone, but wrong
+  // after choosing one that deliberately moves focus somewhere else (into the terminal input).
   const skipRestoreRef = useRef(false);
 
   const items = useMemo<Item[]>(() => {
@@ -48,6 +60,7 @@ export function CommandPalette() {
       id: file.path,
       label: file.name,
       hint: "open file",
+      relocatesFocus: false,
       run: () => router.push(`/${file.path}`),
     }));
     const verbs: Item[] = commands.map((command) => ({
@@ -55,13 +68,11 @@ export function CommandPalette() {
       id: command.name,
       label: command.name,
       hint: command.summary,
-      run: () => {
-        setTerminalOpen(true);
-        void submit(command.name);
-      },
+      relocatesFocus: true,
+      run: () => runInTerminal(command.name),
     }));
     return [...files, ...verbs];
-  }, [router, setTerminalOpen, submit]);
+  }, [router, runInTerminal]);
 
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -105,7 +116,11 @@ export function CommandPalette() {
 
   function choose(item: Item | undefined) {
     if (!item) return;
-    skipRestoreRef.current = true;
+    // Per item, not unconditionally. Skipping the restore is only correct when the chosen action
+    // takes focus for itself; a file choice just pushes a route, so an unconditional skip left
+    // focus on <body> — with nothing selected, arrow keys and Tab starting over from the top of
+    // the document — for the palette's single most common action.
+    skipRestoreRef.current = item.relocatesFocus;
     setPaletteOpen(false);
     item.run();
   }

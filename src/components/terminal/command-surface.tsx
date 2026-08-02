@@ -20,6 +20,13 @@ type Surface = {
   history: string[];
   submit: (input: string) => Promise<void>;
   completeInput: (input: string) => string;
+  /** Open the terminal, run `line` in it, and put focus on the terminal input. */
+  runInTerminal: (line: string) => void;
+  /**
+   * Incremented by every runInTerminal call. TerminalPanel watches it to know a focus move was
+   * asked for even when `terminalOpen` did not change — see runInTerminal for why that matters.
+   */
+  focusRequest: number;
 };
 
 const SurfaceContext = createContext<Surface | null>(null);
@@ -56,6 +63,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
   const [cwd, setCwd] = useState("");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
+  const [focusRequest, setFocusRequest] = useState(0);
   const nextId = useRef(0);
 
   const ctx = useMemo<CommandContext>(
@@ -123,6 +131,23 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
     [ctx, cwd, router],
   );
 
+  // The one dispatch path for "open the terminal and run this line". Its three callers — the `?`
+  // chord below, the empty-state shortcut row, and the palette's command items — previously each
+  // carried their own copy of these lines.
+  //
+  // Focus is requested through a counter rather than inferred from the open transition:
+  // setTerminalOpen(true) is not a state change when the panel is already open, so the panel's
+  // focus effect never re-runs and focus is left wherever the invoking surface dropped it — on
+  // <body>, once the palette unmounts. The counter makes the request unconditional.
+  const runInTerminal = useCallback(
+    (line: string) => {
+      setTerminalOpen(true);
+      setFocusRequest((n) => n + 1);
+      void submit(line);
+    },
+    [submit],
+  );
+
   const completeInput = useCallback((input: string) => {
     const { completed, candidates } = complete(input, ctx);
     if (candidates.length > 0) {
@@ -153,6 +178,17 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
         setPaletteOpen((open) => !open);
         return;
       }
+      // Everything below this line opens the terminal, and opening the terminal moves focus into
+      // it. While the palette is up that focus move lands OUTSIDE a live role="dialog"
+      // aria-modal="true" — and Escape, the palette's only documented exit, is bound on the dialog
+      // wrapper, so it stops reaching a handler the moment focus leaves. The palette would be
+      // stuck open over a terminal the visitor cannot see the point of. ⌘K above stays live
+      // precisely because toggling the palette shut is what it is supposed to do.
+      //
+      // `typing` does not cover this: it only recognises INPUT/TEXTAREA/contentEditable, and the
+      // palette's match rows are <button>s, so `?` fired straight through them.
+      if (paletteOpen) return;
+
       if (event.ctrlKey && !event.metaKey && noExtraModifiers && event.key === "`") {
         event.preventDefault();
         setTerminalOpen((open) => !open);
@@ -160,14 +196,13 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       }
       if (event.key === "?" && !typing) {
         event.preventDefault();
-        setTerminalOpen(true);
-        void submit("help");
+        runInTerminal("help");
       }
     };
 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [submit]);
+  }, [paletteOpen, runInTerminal]);
 
   const value = useMemo<Surface>(
     () => ({
@@ -180,8 +215,20 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       history,
       submit,
       completeInput,
+      runInTerminal,
+      focusRequest,
     }),
-    [terminalOpen, paletteOpen, cwd, entries, history, submit, completeInput],
+    [
+      terminalOpen,
+      paletteOpen,
+      cwd,
+      entries,
+      history,
+      submit,
+      completeInput,
+      runInTerminal,
+      focusRequest,
+    ],
   );
 
   return <SurfaceContext.Provider value={value}>{children}</SurfaceContext.Provider>;

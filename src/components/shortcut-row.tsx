@@ -11,15 +11,12 @@ export function ShortcutRow({
   label: string;
   action: "palette" | "terminal" | "help";
 }) {
-  const { setPaletteOpen, setTerminalOpen, terminalOpen, submit } = useCommandSurface();
+  const { setPaletteOpen, setTerminalOpen, terminalOpen, runInTerminal } = useCommandSurface();
 
   function onClick() {
     if (action === "palette") setPaletteOpen(true);
     if (action === "terminal") setTerminalOpen(!terminalOpen);
-    if (action === "help") {
-      setTerminalOpen(true);
-      void submit("help");
-    }
+    if (action === "help") runInTerminal("help");
   }
 
   // Only the terminal row is a disclosure control — it toggles #terminal-body (always rendered,
