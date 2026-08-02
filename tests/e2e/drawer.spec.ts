@@ -36,38 +36,86 @@ test("Escape closes the drawer and returns focus to the toggle", async ({ page }
   await toggle(page).click();
   const link = page.getByRole("link", { name: "whoami.md" });
   await expect(link).toBeVisible();
-
-  // Clicking <summary> toggles the native, uncontrolled <details> element immediately — the
-  // link above becomes visible right away regardless of hydration, which is exactly the point
-  // of a plain <details> (it must work with no JS at all, per this repo's no-JS requirement).
-  // But Escape is handled by a document-level keydown listener that mobile-nav-drawer.tsx only
-  // attaches from a useEffect gated on React's own `open` state, which is set by the details'
-  // own onToggle handler — i.e. only *after* React has processed the click, re-rendered, and
-  // flushed its passive effects.
-  //
-  // Unlike the ⌘K/⌃` chord helpers elsewhere in this suite, this is not merely a load-dependent
-  // hydration gap that a single retry safely absorbs: passive effects are *never* flushed
-  // synchronously within the click that triggers them — React defers them past the next paint
-  // by design — while the native toggle above is synchronous with that same click. So "the link
-  // is visible" is guaranteed to be true strictly before the listener can possibly be attached;
-  // there is no load level at which a single Escape press is guaranteed to land after it, only
-  // a race whose odds worsen under contention (confirmed directly: instrumented runs showed a
-  // real, measurable gap between the native toggle and the listener attaching, and a captured
-  // failure needed exactly one extra attempt to close). A hard `attempts === 1` bar — right for
-  // the chord helpers, where hydration has a real-world head start — would therefore make this
-  // test spuriously red on a harmless race no human could ever trigger (no one presses Escape
-  // in the same JavaScript tick their click lands). The bound below still catches a genuinely
-  // broken handler: if Escape stopped working entirely, every attempt would keep failing and
-  // the outer toPass would time out and throw, same as it would with a hard equality check.
-  let attempts = 0;
-  await expect(async () => {
-    attempts++;
-    await page.keyboard.press("Escape");
-    await expect(link).toBeHidden({ timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
-  expect(
-    attempts,
-    "Escape needed a suspicious number of attempts to close the drawer — investigate rather than raise this further",
-  ).toBeLessThanOrEqual(2);
+  await page.keyboard.press("Escape");
+  await expect(link).toBeHidden();
   await expect(toggle(page)).toBeFocused();
+});
+
+// No wait between the click and the keypress, deliberately: clicking <summary> toggles the
+// native, uncontrolled <details> element synchronously (the link becomes visible immediately,
+// no JS required — the whole point of a plain <details> per this repo's no-JS requirement), but
+// per the HTML spec the <details> `toggle` *event* is dispatched asynchronously, as a separately
+// queued task. An earlier version of the Escape listener attached from an effect gated on
+// React's `open` state, which is only set once that queued `toggle` event reaches React's
+// `onToggle` handler — a real, measured gap (tens of milliseconds, worse under load or CPU
+// throttling) in which a fast Escape press was silently lost. The listener now attaches once at
+// mount and reads the DOM's own `open` state directly, so it no longer depends on that event
+// having arrived at all — this test presses Escape as fast as physically possible specifically
+// to prove that.
+test("Escape closes the drawer even pressed immediately after opening, with no wait in between", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await toggle(page).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: "whoami.md" })).toBeHidden();
+  await expect(toggle(page)).toBeFocused();
+});
+
+// Delays every JS chunk so the test can open the drawer the same way a visitor on a slow
+// connection or an underpowered device can: natively, via the browser's own <details> toggle,
+// before React ever hydrates. That leaves the DOM genuinely open while React's `open` state is
+// still its initial `false` — a real desync, not a test artifact — because the `toggle` event
+// that would have told React about it had no listener yet to receive it. The extra wait after
+// goto() gives the delayed bundle time to arrive and hydrate before each test's real assertion.
+async function openBeforeHydration(page: import("@playwright/test").Page) {
+  // Only scripts are delayed — not the CSS the same glob would otherwise also match under
+  // _next/static/chunks/. CSS is render-blocking: delaying it holds up the very first paint,
+  // which holds up Playwright's own actionability check for the click below (it waits for the
+  // element to actually be visible/stable), pushing the click past the point where the "delayed"
+  // scripts have already arrived and hydrated — silently defeating this whole reproduction.
+  await page.route("**/_next/static/chunks/**", async (route) => {
+    if (route.request().resourceType() !== "script") {
+      await route.continue();
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await route.continue();
+  });
+  // waitUntil: "commit" is load-bearing here, not the default: the default waits for the
+  // "load" event, which itself waits for every in-flight resource — including the chunks this
+  // helper just deliberately delayed — so goto() wouldn't resolve until after they'd already
+  // arrived, defeating the point. "commit" resolves once the navigation's response has started,
+  // well before any script has had a chance to run, so the click below is genuinely racing the
+  // (still in-flight, delayed) bundle rather than following behind it.
+  await page.goto("/", { waitUntil: "commit" });
+  await toggle(page).click();
+  await expect(page.getByRole("link", { name: "whoami.md" })).toBeVisible();
+  await page.waitForTimeout(2500);
+}
+
+test("Escape still closes a drawer that was opened natively before hydration completed", async ({
+  page,
+}) => {
+  await openBeforeHydration(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: "whoami.md" })).toBeHidden();
+  await expect(toggle(page)).toBeFocused();
+});
+
+test("a drawer link opened before hydration still closes the drawer instead of leaving it covering the destination", async ({
+  page,
+}) => {
+  await openBeforeHydration(page);
+  await page.getByRole("link", { name: "whoami.md" }).click();
+  await expect(page).toHaveURL("/whoami");
+  await expect(page.getByRole("heading", { name: "whoami" })).toBeVisible();
+  // Checking a *different* file's link than the one just navigated to, not "whoami.md" again:
+  // once on /whoami the tab strip grows a "Close whoami.md" link, and getByRole's name filter is
+  // a substring match by default, so a "whoami.md" query would silently resolve to that always-
+  // visible, unrelated link instead of the drawer's own (by-then collapsed, and so excluded from
+  // the accessibility tree) copy — proving nothing. "stack.json" has no such collision, so its
+  // being hidden actually is proof the drawer's own pane closed rather than sitting open on top
+  // of the page it just navigated to.
+  await expect(page.getByRole("link", { name: "stack.json" })).toBeHidden();
 });
