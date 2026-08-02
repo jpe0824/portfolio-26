@@ -27,11 +27,15 @@ export default function RootLayout({
   explorer: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${jetbrainsMono.variable} no-js`}>
+    <html lang="en" className={`${jetbrainsMono.variable} no-js`} suppressHydrationWarning>
       <body>
         {/* Removed during parse, before the frame paints, so JS-only controls never
             flash. With JS off the class stays and .js-only stays hidden — the
-            terminal is absent rather than present and dead. */}
+            terminal is absent rather than present and dead. suppressHydrationWarning above
+            is confined to this element's own attributes (React does not propagate it to
+            children): the inline script always desyncs `className` from what the server
+            sent, by design, so this is the standard next-themes-style mitigation for that
+            one, expected attribute — not a blanket waiver on this subtree. */}
         <script dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.remove('no-js')" }} />
         <TerminalFrame explorer={explorer}>{children}</TerminalFrame>
       </body>

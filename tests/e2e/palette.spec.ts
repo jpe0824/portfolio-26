@@ -14,6 +14,75 @@ const paletteInput = (page: import("@playwright/test").Page) =>
 
 const term = (page: import("@playwright/test").Page) => page.getByRole("region", { name: "Terminal" });
 
+// Computes the real, on-screen contrast ratio for a text element against whatever is actually
+// behind it, rather than asserting a class name — a class name can change while staying
+// compliant (or stay while regressing), so it proves nothing about what a viewer sees.
+//
+// getComputedStyle can hand back any CSS Color 4 syntax (this repo's tokens are oklch()), and
+// a canvas is the one place the browser will resolve *any* valid color string down to concrete
+// 8-bit sRGB — asking the platform beats hand-rolling an oklch→rgb conversion this test would
+// have to keep in sync with globals.css by hand.
+async function contrastRatio(locator: import("@playwright/test").Locator): Promise<number> {
+  return locator.evaluate((node: Element) => {
+    function toRgb(colorStr: string): [number, number, number, number] {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1;
+      canvas.height = 1;
+      const ctx = canvas.getContext("2d")!;
+      ctx.fillStyle = colorStr;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
+    }
+
+    function relativeLuminance([r, g, b]: [number, number, number]): number {
+      const [rl, gl, bl] = [r, g, b].map((channel) => {
+        const proportion = channel / 255;
+        return proportion <= 0.03928 ? proportion / 12.92 : Math.pow((proportion + 0.055) / 1.055, 2.4);
+      });
+      return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
+    }
+
+    // Walks from the element up to <html>, compositing every non-transparent background onto
+    // an assumed-opaque white canvas, nearest ancestor last. Every real background in this app
+    // is fully opaque by the time the walk reaches it, so this resolves on the first painted
+    // ancestor in practice — the walk exists so the test measures what sits behind the element,
+    // not just its own (here, transparent) background-color.
+    function effectiveBackground(start: Element): [number, number, number] {
+      const layers: [number, number, number, number][] = [];
+      for (let el: Element | null = start; el; el = el.parentElement) {
+        const [r, g, b, a] = toRgb(getComputedStyle(el).backgroundColor);
+        if (a > 0) layers.unshift([r, g, b, a]);
+      }
+      let [cr, cg, cb] = [255, 255, 255];
+      for (const [r, g, b, a] of layers) {
+        cr = r * a + cr * (1 - a);
+        cg = g * a + cg * (1 - a);
+        cb = b * a + cb * (1 - a);
+      }
+      return [cr, cg, cb];
+    }
+
+    const background = effectiveBackground(node);
+    const inkColor = toRgb(getComputedStyle(node).color);
+    // Tailwind's opacity-70 utility sets the CSS `opacity` property, which blends the whole
+    // element into whatever sits behind it at render time. Reproducing that blend is what makes
+    // this a *composited* ratio rather than the ink color measured in isolation.
+    const opacity = parseFloat(getComputedStyle(node).opacity) || 1;
+    const renderedText: [number, number, number] = [
+      opacity * inkColor[0] + (1 - opacity) * background[0],
+      opacity * inkColor[1] + (1 - opacity) * background[1],
+      opacity * inkColor[2] + (1 - opacity) * background[2],
+    ];
+
+    const l1 = relativeLuminance(renderedText);
+    const l2 = relativeLuminance(background);
+    const lighter = Math.max(l1, l2);
+    const darker = Math.min(l1, l2);
+    return (lighter + 0.05) / (darker + 0.05);
+  });
+}
+
 // ⌘K is handled by the same keydown listener, wired up in the same useEffect, as the ⌃`
 // terminal toggle in command-surface.tsx — see openTerminal() in terminal.spec.ts for the
 // original case this pattern covers. goto()'s load event can fire before that effect
@@ -32,7 +101,17 @@ async function openPalette(page: import("@playwright/test").Page) {
   let attempts = 0;
   await expect(async () => {
     attempts++;
-    if (await dialog.isVisible()) return;
+    // isVisible() is awaited unconditionally, on every attempt, so the timing this retry loop
+    // presents to the chord's listener is identical to a version that never checked attempts at
+    // all — only what happens with the result changes. Only a *retry* (attempts > 1) may treat
+    // an already-visible dialog as success — the previous press might have opened it just after
+    // that attempt's own visibility assertion timed out. The first attempt must always press the
+    // chord itself: without the `attempts > 1` guard, a dialog that happened to already be open
+    // before this call ran would make this function report success (attempts === 1) without ever
+    // exercising the shortcut — the one remaining way this helper could pass while the keyboard
+    // shortcut is broken.
+    const alreadyVisible = await dialog.isVisible();
+    if (attempts > 1 && alreadyVisible) return;
     await page.keyboard.press("ControlOrMeta+k");
     await expect(dialog).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });
@@ -55,6 +134,19 @@ test("the palette lists commands as well as files", async ({ page }) => {
   await openPalette(page);
   await paletteInput(page).fill("tree");
   await expect(palette(page).getByText("print the whole content tree")).toBeVisible();
+});
+
+test("the active row's hint text meets the 4.5:1 AA floor against its own background", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await openPalette(page);
+
+  // The first match row is active by default (command-palette.tsx initializes `active` to 0),
+  // so no arrow-key press is needed to select it before measuring.
+  const hint = palette(page).getByRole("option").first().locator("span").last();
+  const ratio = await contrastRatio(hint);
+  expect(ratio, "active-row hint text contrast against its own background").toBeGreaterThanOrEqual(4.5);
 });
 
 test("escape closes the palette", async ({ page }) => {

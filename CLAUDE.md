@@ -22,8 +22,26 @@ See `AGENTS.md` for Next.js framework idiom. This file covers repo-specific rule
 - **Dark mode only.** No light theme, no toggle.
 - **Tailwind v4 is CSS-first.** Tokens live in `@theme` in `src/app/globals.css`.
   **Never create `tailwind.config.js`.**
-- **Exactly one client component:** `src/components/mobile-nav-drawer.tsx`. Everything else is a
-  Server Component. Adding `"use client"` anywhere else needs a deliberate decision.
+- **Client components are an enumerated list, not a count.** Exactly these five:
+  `mobile-nav-drawer`, `terminal/command-surface`, `terminal/terminal-panel`,
+  `terminal/command-palette`, `shortcut-row`. Adding a sixth needs a deliberate decision.
+  The governing rule is **no content is reachable only through the terminal** — the explorer
+  stays a complete, no-JS path to every file.
+- **The frame lives in the root layout, not the page.** Layouts do not re-render on navigation
+  (`next/dist/docs/01-app/03-api-reference/03-file-conventions/layout.md:240`), which is what keeps
+  terminal scrollback alive across a soft nav. The explorer is a parallel-route `@explorer` slot so
+  it can still receive `params` and stay a Server Component. Both slots need a `default.tsx`.
+- **`/` is not a content node.** The manifest has no entry for it; `[[...path]]/page.tsx` handles
+  `segments.length === 0` and renders `EmptyState`. `generateStaticParams` must therefore add `""`
+  back explicitly, in **both** the page and the `@explorer` slot. README lives at `/readme`.
+- **`PathLine` is desktop-only** (`hidden md:flex`). Mobile chrome was ~200px of a 667px viewport
+  once the tab strip and panel header landed. Nested files lose their folder prefix on a phone;
+  that is accepted, not a bug.
+- **`⌘P` is deliberately unbound** — it is the browser's print shortcut. The `⌘K` palette covers
+  files and commands in one surface.
+- **JS-only controls use `.js-only`.** `<html>` ships with `class="no-js"`, removed by an inline
+  script during parse. With scripting off, the terminal and shortcut rows are absent rather than
+  present and dead.
 - **The mobile drawer must work without JavaScript.** It is a controlled `<details>`, not a state-
   driven div. `tests/e2e/no-js.spec.ts` enforces this.
 - **`text-fg-subtle` is decorative only** — 4.06:1 on `bg-elevated`, below WCAG AA. Line numbers
@@ -56,11 +74,32 @@ Consequences that have bitten this repo three separate times:
   auto-expands the folder containing the current path. A directory-listing test passed green against a
   completely empty `DirectoryListing` for exactly this reason.
 - `getByRole("group")` matches the drawer's `<details>` *and* every nested folder `<details>` inside it.
+- **The terminal is a sibling of `<main>`, not inside it.** This is deliberate: `getByRole("main")`
+  is the standard content-pane scope, and scrollback inside `main` would match content assertions.
+  Scope terminal assertions with `getByRole("region", { name: "Terminal" })`. Do not move the panel
+  inside `main`.
 
 **So: always scope.** Use `getByRole("main")` for content-pane assertions, and the specific landmark
 name for nav assertions. Target the drawer toggle by `getByLabel("Toggle file explorer")`.
 
 **Before trusting a new test, watch it fail.** Break the thing it covers, confirm red, then restore.
+
+**Assertions that pass on a broken feature.** Each of these looks like a correct check and isn't;
+all four are specific and non-obvious enough to slip past review.
+
+- `getByRole(..., { name })` is a case-insensitive **substring** match, not an exact match — an
+  accessible-name assertion meant to pin one control will happily match a longer name that merely
+  contains it. Pass `exact: true` whenever the intent is "this exact name."
+- `toBeHidden()` passes when the element is **absent from the DOM**, not only when it's present but
+  hidden. If the assertion means "this control exists but isn't shown right now," assert presence
+  first, then hidden.
+- A `position: fixed` overlay does not participate in document flow, so it cannot change
+  `document.scrollHeight` or the page's scroll position. An assertion that "the page doesn't scroll"
+  while the overlay is open, written against those metrics, is measuring something the overlay was
+  never able to affect.
+- A retry helper (`toPass`, a hand-rolled retry loop) that swallows failures until one attempt
+  succeeds hides a systematic break unless the attempt count itself is asserted — require exactly
+  one attempt (or whatever the real budget is), not merely eventual success.
 
 Playwright config specifics, all load-bearing:
 
@@ -70,6 +109,17 @@ Playwright config specifics, all load-bearing:
 - **`testIgnore: /no-js\.spec\.ts/` on the `desktop` and `mobile` projects.** `testMatch` on the
   `no-js` project only says which files *that* project runs; without `testIgnore` the other two also
   collect that spec and run it under viewports it was never written for.
+- **`pnpm test:e2e --project=X -- <filter>` silently swallows the filter.** pnpm forwards everything
+  after `--` to the script's underlying command, but Playwright reads its own filter argument
+  positionally, before `--project`; the filter after `--` is dropped rather than erroring. Run
+  `npx playwright test --project=X <filter>` directly when you need both.
+- **A file-scope `test.use({ viewport })` overrides the mobile project's device viewport.** The
+  `mobile` project's own `devices["Pixel 7"]` viewport only applies if nothing more specific wins; a
+  `test.use` at the top of a spec file beats the project config for every test in that file, silently
+  turning a "mobile" run into a desktop-sized duplicate. Only pin a viewport at file scope for a test
+  that is reproducing one specific fixed-size case, and scope the `test.use` to a `describe` block
+  around just that test — never the whole file — so the rest of the file still exercises the
+  project's real viewport.
 
 ## Local development
 
@@ -77,6 +127,10 @@ Playwright config specifics, all load-bearing:
   port (3210/3211) for anything automated, and **never kill a process you did not start.**
 - `next dev` refuses a second instance for the same project directory *regardless of port*. For a
   second server, use `pnpm build && pnpm exec next start -p <port>`.
+- Some symptoms — dev-only console warnings (hydration mismatches, Fast Refresh output) chief among
+  them — don't reproduce under `next start`, which skips the dev-mode checks that produce them. When
+  a second `next dev` is unavoidable, create a throwaway `git worktree` (its own `node_modules`, a
+  fresh `pnpm install`), run `pnpm dev -p <port>` inside it, and remove the worktree afterward.
 
 ## Content model
 
@@ -156,6 +210,7 @@ Left untouched pending owner decision.
 ## Phases
 
 1. **Terminal shell** — done
-2. `/commands` palette and AI chat
+2. **a. Empty state, editor tab, terminal, `⌘K` palette** — done
+   **b. AI chat** — not started
 3. Local LLM on Proxmox
 4. Transport (Tailscale vs. Cloudflare tunnel) + SQLite

@@ -24,7 +24,17 @@ async function openTerminal(page: import("@playwright/test").Page) {
   let attempts = 0;
   await expect(async () => {
     attempts++;
-    if (await input.isVisible()) return;
+    // isVisible() is awaited unconditionally, on every attempt, so the timing this retry loop
+    // presents to the chord's listener is identical to a version that never checked attempts at
+    // all — only what happens with the result changes. Only a *retry* (attempts > 1) may treat
+    // an already-visible input as success — the previous press might have opened it just after
+    // that attempt's own visibility assertion timed out. The first attempt must always press the
+    // chord itself: without the `attempts > 1` guard, an input that happened to already be
+    // visible before this call ran would make this function report success (attempts === 1)
+    // without ever exercising the shortcut — the one remaining way this helper could pass while
+    // the keyboard shortcut is broken.
+    const alreadyVisible = await input.isVisible();
+    if (attempts > 1 && alreadyVisible) return;
     await page.keyboard.press("Control+Backquote");
     await expect(input).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 15_000 });

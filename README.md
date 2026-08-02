@@ -18,7 +18,7 @@ pnpm test:e2e     # playwright acceptance tests
 - Production: https://jsonedman.dev
 - Vercel alias: https://portfolio-26-jason-personal-f16e1530.vercel.app
 - Deployed via Vercel's GitHub integration — pushing to `main` triggers the production build.
-- **Not indexed** — placeholder content, see `CLAUDE.md`.
+- Indexed — `noindex` was removed once real content landed (2026-07-31).
 
 ## Documentation
 - `CLAUDE.md` — repo conventions and constraints
