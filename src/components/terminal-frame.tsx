@@ -3,6 +3,7 @@ import { TopBar } from "./top-bar";
 import { MobileNavDrawer } from "./mobile-nav-drawer";
 import { CommandSurface } from "./terminal/command-surface";
 import { TerminalPanel } from "./terminal/terminal-panel";
+import { CommandPalette } from "./terminal/command-palette";
 
 export function TerminalFrame({
   explorer,
@@ -35,6 +36,7 @@ export function TerminalFrame({
         </div>
         <StatusBar />
       </div>
+      <CommandPalette />
     </CommandSurface>
   );
 }
