@@ -21,6 +21,11 @@ test("robots.txt keeps the terminal's data source out of the index", async ({ re
   expect(body).toContain("Disallow: /content-index.json");
 });
 
+test("robots.txt keeps the chat endpoint out of the index", async ({ request }) => {
+  const body = await (await request.get("/robots.txt")).text();
+  expect(body).toContain("Disallow: /api/");
+});
+
 test("sitemap.xml lists every route the app prerenders, and only those", async ({ request }) => {
   const response = await request.get("/sitemap.xml");
   expect(response.status()).toBe(200);

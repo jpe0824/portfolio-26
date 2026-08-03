@@ -57,6 +57,51 @@ See `AGENTS.md` for Next.js framework idiom. This file covers repo-specific rule
   "1"; the numbers matched neither source lines nor visual lines. Per-visual-line numbering is not
   achievable in CSS once text wraps, so markdown gets none.
 
+## AI chat (phase 2b)
+
+`/ai` enters a chat mode inside the existing terminal; `exit` leaves. **It adds no client
+component** — mode and message state live in `command-surface`, rendering in `terminal-panel`.
+The mode switch is a `CommandResult` kind (`{ kind: "mode" }`), so dispatch stays in the pure
+registry.
+
+- **The whole corpus is inlined in the system prompt.** It is ~6 KB; there is no retrieval, no
+  embedding, no vector store. `tests/unit/system-prompt.test.ts` asserts a size ceiling — if that
+  test ever fails, the retrieval question genuinely reopens rather than the ceiling being raised.
+- **The subject's name must never appear in model output.** `src/lib/ai/redact.ts` guarantees it;
+  the prompt rule alone does not, because `whoami.md` hands the model the exact string. The
+  streaming redactor buffers text it cannot yet prove is safe: on every chunk it finds the last
+  occurrence of the bare first name and holds back everything from there onward until the tail
+  can no longer grow into a match (whitespace, then an optional partial surname, then an optional
+  possessive). That scan has no fixed length limit — an earlier version held back only a fixed
+  32-character window, which let the surname leak whenever a wide run of whitespace separated the
+  two names. A separate, inherently short check (at most 5 characters, the length of "jason")
+  catches a bare prefix of the first name still growing at the very end of the buffer. The
+  apostrophe character class is written as Unicode escapes (`'`, `’`), never literal
+  glyphs — the two look identical on screen, and a mistyped literal silently stops matching with
+  no test pointing at the cause.
+- **Citations are linkified against the manifest, not tool-called.** `cite.ts` matches a file's
+  `source` (path *with* extension), which is also how the system prompt delimits files. If those
+  two spellings ever drift apart, citations stop resolving with no error anywhere.
+- **`src/lib/ai/provider.ts` is the only place a provider is named.** Gemini primary, Groq
+  fallback, both free tiers with no card — which is what makes the $0 ceiling structural rather
+  than enforced by our own rate limiter. Model IDs are pinned against live provider docs rather
+  than chosen from memory: free-tier lineups and per-model shutdown dates shift with only weeks of
+  notice, so re-pinning is meant to stay a one-line change in that file. Phase 3 prepends a homelab
+  candidate here and changes nothing else.
+- **Keys are optional everywhere.** No keys means an empty chain, a 503, and a degraded line.
+  `pnpm build` and the full suite must stay green with zero secrets set.
+- **The message-length cap applies only to the newest message.** `src/app/api/chat/route.ts`
+  rejects a request when the latest turn exceeds 500 characters; earlier turns were already
+  validated when first sent. Assistant replies can run past 500 characters — `GENERATION`'s
+  token budget allows it — so checking every message would 400 the very next question over text
+  the model wrote, not the visitor. History past the most recent 6 messages is truncated, never
+  rejected — a long conversation is legitimate, it just doesn't all need to be sent.
+- **Playwright never calls a real provider, except one test.** `tests/e2e/chat.spec.ts` mocks
+  `**/api/chat` with `page.route` everywhere except the test asserting the live endpoint never
+  hangs; that one test asserts only that something arrives, never what.
+- **Only `exit` and `clear` are intercepted in chat mode.** Everything else is a question, so
+  "what does ls do?" is answered rather than executed.
+
 ## Testing
 
 `pnpm test` is Vitest over pure logic; `pnpm test:e2e` is Playwright over real browser behavior.
@@ -230,6 +275,6 @@ Left untouched pending owner decision.
 
 1. **Terminal shell** — done
 2. **a. Empty state, editor tab, terminal, `⌘K` palette** — done
-   **b. AI chat** — not started
+   **b. AI chat** — done
 3. Local LLM on Proxmox
 4. Transport (Tailscale vs. Cloudflare tunnel) + SQLite
