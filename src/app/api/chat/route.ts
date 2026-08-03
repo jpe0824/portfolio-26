@@ -4,6 +4,7 @@ import { readContentFile } from "@/lib/read-content";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import { GENERATION, resolveModels, type Candidate } from "@/lib/ai/provider";
 import { createRedactor } from "@/lib/ai/redact";
+import { MAX_QUESTION_CHARS, MAX_MESSAGES } from "@/lib/ai/limits";
 
 /**
  * The site's only dynamic route; every page stays statically prerendered.
@@ -13,8 +14,12 @@ import { createRedactor } from "@/lib/ai/redact";
  */
 export const runtime = "nodejs";
 
-export const MAX_QUESTION_CHARS = 500;
-export const MAX_MESSAGES = 6;
+// Re-exported rather than imported directly by callers outside this module: the terminal input
+// (a client component) needs MAX_QUESTION_CHARS too, and importing it from this route would
+// pull `streamText`, `readContentFile`, and the rest of this server-only module into the client
+// bundle. `@/lib/ai/limits` is the shared source; this re-export exists only for tests that
+// already import it from here.
+export { MAX_QUESTION_CHARS, MAX_MESSAGES };
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -37,7 +42,7 @@ function systemPrompt(): Promise<string> {
  * provider's own free-tier quota is the actual ceiling, and that ceiling cannot bill.
  */
 const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 10;
+export const MAX_PER_WINDOW = 10;
 const hits = new Map<string, number[]>();
 
 function rateLimited(key: string): boolean {
@@ -45,6 +50,16 @@ function rateLimited(key: string): boolean {
   const recent = (hits.get(key) ?? []).filter((at) => now - at < WINDOW_MS);
   recent.push(now);
   hits.set(key, recent);
+
+  // Only `key`'s own stale timestamps are pruned above. An IP that never returns would
+  // otherwise sit in this map forever on a long-lived Fluid Compute instance, one entry per
+  // distinct visitor for as long as the instance lives. Sweeping the whole map on every write
+  // bounds it to the number of IPs active within the last WINDOW_MS, rather than the number
+  // ever seen.
+  for (const [otherKey, timestamps] of hits) {
+    if (otherKey !== key && timestamps.every((at) => now - at >= WINDOW_MS)) hits.delete(otherKey);
+  }
+
   return recent.length > MAX_PER_WINDOW;
 }
 
@@ -88,16 +103,42 @@ function parse(body: unknown): ChatMessage[] | null {
 
   // Truncation rather than rejection: a long conversation is legitimate, it just does not all
   // need to be sent. slice(-N) keeps the most recent turn, which is the actual question.
-  return parsed.slice(-MAX_MESSAGES);
+  const truncated = parsed.slice(-MAX_MESSAGES);
+
+  // slice(-N) can land on an odd boundary and open with an assistant turn — e.g. a client that
+  // sends [assistant, user, assistant, user, assistant, user] after its own truncation. Google's
+  // SDK maps assistant to role "model" with no reordering, and a leading model turn is
+  // provider-dependent at best, so it is dropped rather than sent. `length > 1` keeps this from
+  // ever emptying the array outright — the newest turn always survives.
+  if (truncated.length > 1 && truncated[0].role === "assistant") return truncated.slice(1);
+  return truncated;
 }
 
-/** Returns the first candidate that yields a chunk, so a provider that 429s is skipped silently. */
+/**
+ * Returns the first candidate that yields a chunk, so a provider that 429s is skipped silently.
+ *
+ * `streamText` does not throw on a provider failure (a 429, a downtime response): it routes the
+ * error to `onError` — `console.error` by default — and completes `textStream` with zero chunks.
+ * An empty completion is therefore itself the failure signal this function falls back on; a
+ * synchronous throw is a second, separate failure mode still worth guarding against (a malformed
+ * call before any network request is even made), which is what the `try`/`catch` remains for.
+ */
 async function openStream(candidates: Candidate[], system: string, messages: ChatMessage[]) {
   for (const candidate of candidates) {
     try {
-      const result = streamText({ model: candidate.model, system, messages, ...GENERATION });
+      const result = streamText({
+        model: candidate.model,
+        system,
+        messages,
+        ...GENERATION,
+        // Overridden rather than left as the library default so the log line names which
+        // candidate failed. Still server-side only — nothing here reaches the client, which
+        // never learns which provider was tried.
+        onError: ({ error }) => console.error(`chat: ${candidate.id} stream failed`, error),
+      });
       const iterator = result.textStream[Symbol.asyncIterator]();
       const first = await iterator.next();
+      if (first.done) continue;
       return { iterator, first };
     } catch {
       // Try the next provider. A failure here is a quota or availability problem, and the

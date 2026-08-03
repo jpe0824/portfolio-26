@@ -6,6 +6,7 @@ import { displayPath } from "@/lib/commands/registry";
 import { useCommandSurface } from "./command-surface";
 import { manifest } from "@/content/manifest";
 import { citeSegments } from "@/lib/ai/cite";
+import { MAX_QUESTION_CHARS } from "@/lib/ai/limits";
 import type { OutputLine } from "@/lib/commands/types";
 
 const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
@@ -199,6 +200,11 @@ export function TerminalPanel() {
             // aria-hidden (it's a visual glyph, `❯`, not meant to be read), and a static label
             // would give a screen-reader user no signal that `cd` changed the working directory.
             aria-label={mode === "ai" ? "Chat input" : `Terminal input (${displayPath(cwd)})`}
+            // Only in chat mode: shell commands aren't bounded by this, and the route's own
+            // check is the same MAX_QUESTION_CHARS — this just keeps the visitor from typing
+            // past a limit the server would 400 on anyway, rendering "the model is resting" for
+            // what was actually too much input, not a model failure.
+            maxLength={mode === "ai" ? MAX_QUESTION_CHARS : undefined}
             autoComplete="off"
             spellCheck={false}
             className="min-w-0 flex-1 bg-transparent text-fg"
