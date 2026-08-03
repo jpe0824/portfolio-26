@@ -77,8 +77,8 @@ registry.
   two names. A separate, inherently short check (at most 5 characters, the length of "jason")
   catches a bare prefix of the first name still growing at the very end of the buffer. The
   apostrophe character class is written as Unicode escapes (`'`, `’`), never literal
-  glyphs — the two look identical on screen, and a mistyped literal silently stops matching with
-  no test pointing at the cause.
+  glyphs — the two are visually near-identical, and a mistyped literal silently stops matching
+  with no test pointing at the cause.
 - **Citations are linkified against the manifest, not tool-called.** `cite.ts` matches a file's
   `source` (path *with* extension), which is also how the system prompt delimits files. If those
   two spellings ever drift apart, citations stop resolving with no error anywhere.
