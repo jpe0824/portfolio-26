@@ -8,7 +8,15 @@ import { runCommand } from "@/lib/commands/run";
 import { displayPath } from "@/lib/commands/registry";
 import type { CommandContext, GrepHit, OutputLine } from "@/lib/commands/types";
 
-export type Entry = { id: number; prompt?: string; lines: OutputLine[] };
+export type Entry = {
+  id: number;
+  prompt?: string;
+  lines: OutputLine[];
+  /** Model output: rendered with citation links. Command output is never linkified. */
+  chat?: boolean;
+  /** True while tokens are still arriving, so the log region can advertise aria-busy. */
+  streaming?: boolean;
+};
 
 type Surface = {
   terminalOpen: boolean;
@@ -65,6 +73,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<"shell" | "ai">("shell");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [focusRequest, setFocusRequest] = useState(0);
   const nextId = useRef(0);
 
@@ -90,10 +99,69 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
     [cwd],
   );
 
+  // Kept out of runCommand deliberately: the registry is pure and synchronous-ish over the
+  // content tree, and a network call with streaming partial state does not belong in it.
+  const askModel = useCallback(
+    async (question: string, prompt: string) => {
+      const id = nextId.current++;
+      setEntries((past) => [...past, { id, prompt, lines: [], chat: true, streaming: true }]);
+
+      const history = [...messages, { role: "user" as const, content: question }].slice(-6);
+      let answer = "";
+
+      const settle = (lines: OutputLine[]) =>
+        setEntries((past) =>
+          past.map((entry) => (entry.id === id ? { ...entry, lines, streaming: false } : entry)),
+        );
+
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: history }),
+        });
+
+        // The client owns the failure copy rather than echoing the server's body, so the
+        // degraded line reads the same whether the route 429s, 502s, or is not deployed at all.
+        if (!response.ok || !response.body) {
+          settle([
+            { text: "▸ the model is resting. try `grep`, `tree`, or `open whoami.md`.", tone: "dim" },
+          ]);
+          return;
+        }
+
+        const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+        for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+          answer += chunk.value;
+          const lines = answer.split("\n").map((text) => ({ text }));
+          setEntries((past) => past.map((entry) => (entry.id === id ? { ...entry, lines } : entry)));
+        }
+
+        settle(answer.split("\n").map((text) => ({ text })));
+        setMessages([...history, { role: "assistant" as const, content: answer }].slice(-6));
+      } catch (error) {
+        console.error(error);
+        settle([{ text: "▸ the model is unreachable. the rest of the site still works.", tone: "error" }]);
+      }
+    },
+    [messages],
+  );
+
   const submit = useCallback(
     async (input: string) => {
       const prompt = `${mode === "ai" ? "ai" : displayPath(cwd)} ❯ ${input}`;
       if (input.trim() !== "") setHistory((past) => [...past, input]);
+
+      // In chat mode only `exit` and `clear` are intercepted; everything else is a question.
+      // Without this, a visitor asking "what does ls do?" would get a directory listing.
+      if (mode === "ai") {
+        const word = input.trim();
+        if (word !== "exit" && word !== "clear") {
+          if (word === "") return;
+          await askModel(word, prompt);
+          return;
+        }
+      }
 
       // cat and grep await ctx.readFile/ctx.grep with no try/catch of their own,
       // so a rejected content-index fetch would otherwise propagate out of
@@ -146,7 +214,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
         ]);
       }
     },
-    [ctx, cwd, mode, router],
+    [ctx, cwd, mode, router, askModel],
   );
 
   // The one dispatch path for "open the terminal and run this line". Its three callers — the `?`
