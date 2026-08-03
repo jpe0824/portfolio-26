@@ -106,7 +106,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       const id = nextId.current++;
       setEntries((past) => [...past, { id, prompt, lines: [], chat: true, streaming: true }]);
 
-      const history = [...messages, { role: "user" as const, content: question }].slice(-6);
+      const turns = [...messages, { role: "user" as const, content: question }].slice(-6);
       let answer = "";
 
       const settle = (lines: OutputLine[]) =>
@@ -118,7 +118,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ messages: history }),
+          body: JSON.stringify({ messages: turns }),
         });
 
         // The client owns the failure copy rather than echoing the server's body, so the
@@ -138,7 +138,18 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
         }
 
         settle(answer.split("\n").map((text) => ({ text })));
-        setMessages([...history, { role: "assistant" as const, content: answer }].slice(-6));
+        // A functional update, not an overwrite built from the `turns` snapshot: nothing gates
+        // the input while streaming, so a second askModel call can be in flight at the same
+        // time, both closed over the same pre-request `messages`. Deriving from `prev` here
+        // means whichever call settles second appends onto the first's committed result
+        // instead of clobbering it.
+        setMessages((prev) =>
+          [
+            ...prev,
+            { role: "user" as const, content: question },
+            { role: "assistant" as const, content: answer },
+          ].slice(-6),
+        );
       } catch (error) {
         console.error(error);
         settle([{ text: "▸ the model is unreachable. the rest of the site still works.", tone: "error" }]);

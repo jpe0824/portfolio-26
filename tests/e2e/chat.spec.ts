@@ -118,3 +118,60 @@ test("clear still works inside chat mode", async ({ page }) => {
   // Still in chat mode after clearing — clear wipes scrollback, not the mode.
   await expect(term(page).getByLabel("Chat input", { exact: true })).toBeVisible();
 });
+
+test("a concurrent follow-up does not drop the first exchange from later history", async ({ page }) => {
+  // Nothing gates the input while a response streams, so a second question can be asked
+  // before the first has settled. Both askModel calls close over the same pre-request
+  // `messages` snapshot; a plain overwrite on settle would let whichever call finishes last
+  // wipe out the other's contribution instead of merging with it. That corruption is invisible
+  // in scrollback (entries are keyed by id, not by array position) — it only shows up in the
+  // history payload of a later, third question, so this test asserts on captured request
+  // bodies rather than on what is rendered.
+  const requestBodies: { role: string; content: string }[][] = [];
+  let releaseFirst: () => void = () => {};
+  const firstHeld = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  await page.route("**/api/chat", async (route) => {
+    const { messages } = route.request().postDataJSON() as {
+      messages: { role: string; content: string }[];
+    };
+    requestBodies.push(messages);
+    const question = messages[messages.length - 1]?.content;
+
+    if (question === "first question") {
+      // Held open so the second question below is genuinely in flight at the same time,
+      // not merely typed quickly after the first already resolved.
+      await firstHeld;
+      await route.fulfill({ status: 200, contentType: "text/plain; charset=utf-8", body: "first answer" });
+    } else if (question === "second question") {
+      await route.fulfill({ status: 200, contentType: "text/plain; charset=utf-8", body: "second answer" });
+    } else {
+      await route.fulfill({ status: 200, contentType: "text/plain; charset=utf-8", body: "third answer" });
+    }
+  });
+
+  await openTerminal(page);
+  await run(page, "/ai");
+  await run(page, "first question");
+  await run(page, "second question");
+  // The second question's request is dispatched, and its response arrives, entirely while
+  // the first is still held — proving the two really overlapped rather than running in turn.
+  await expect(term(page).getByText("second answer", { exact: true })).toBeVisible();
+
+  releaseFirst();
+  await expect(term(page).getByText("first answer", { exact: true })).toBeVisible();
+
+  // A third question probes what actually got committed to conversational memory: its
+  // outgoing history is the only place the earlier overwrite bug is observable, since a
+  // concurrently-dispatched request's own payload is fixed before either sibling settles.
+  await run(page, "third question");
+  await expect(term(page).getByText("third answer", { exact: true })).toBeVisible();
+
+  const thirdRequestContents = requestBodies[requestBodies.length - 1].map((message) => message.content);
+  expect(thirdRequestContents).toContain("first question");
+  expect(thirdRequestContents).toContain("first answer");
+  expect(thirdRequestContents).toContain("second question");
+  expect(thirdRequestContents).toContain("second answer");
+});
