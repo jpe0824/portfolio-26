@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { displayPath } from "@/lib/commands/registry";
 import { useCommandSurface } from "./command-surface";
+import { manifest } from "@/content/manifest";
+import { citeSegments } from "@/lib/ai/cite";
 import type { OutputLine } from "@/lib/commands/types";
 
 const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
@@ -20,6 +23,26 @@ const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
 // text node at all does not generate one on its own, `pre-wrap` or not, so blank lines would
 // otherwise collapse to zero height and the output would no longer match the file.
 const LINE = "whitespace-pre-wrap min-h-[1lh]";
+
+// Only chat output is linkified. `cat` prints file text verbatim, and turning paths inside it
+// into links would quietly change shell behavior other specs depend on.
+function LineBody({ text, chat }: { text: string; chat: boolean }) {
+  if (!chat) return <>{text}</>;
+  return (
+    <>
+      {citeSegments(text, manifest).map((segment, i) =>
+        segment.href ? (
+          // cyan, never primary — primary is the key color, reserved for the brand mark.
+          <Link key={i} href={segment.href} className="text-cyan underline">
+            {segment.text}
+          </Link>
+        ) : (
+          <span key={i}>{segment.text}</span>
+        ),
+      )}
+    </>
+  );
+}
 
 export function TerminalPanel() {
   const {
@@ -147,7 +170,7 @@ export function TerminalPanel() {
               {entry.prompt ? <p className={`${LINE} text-fg`}>{entry.prompt}</p> : null}
               {entry.lines.map((line, i) => (
                 <p key={i} className={`${LINE} ${TONE[line.tone ?? "default"]}`}>
-                  {line.text}
+                  <LineBody text={line.text} chat={!!entry.chat} />
                 </p>
               ))}
             </div>

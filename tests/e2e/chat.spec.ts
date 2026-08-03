@@ -175,3 +175,42 @@ test("a concurrent follow-up does not drop the first exchange from later history
   expect(thirdRequestContents).toContain("second question");
   expect(thirdRequestContents).toContain("second answer");
 });
+
+test.describe("citations", () => {
+  // Desktop viewport: this navigates and then asserts against the content pane, and the
+  // assertions below are scoped to <main> rather than the page precisely because the explorer
+  // auto-expands to the current path and would match the same filename in the sidebar.
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("a cited path opens the file in the editor pane", async ({ page }) => {
+    await mockChat(page, "That work is in projects/professional/migration.md today.");
+    await openTerminal(page);
+    await run(page, "/ai");
+    await run(page, "where is the migration work?");
+
+    const link = term(page).getByRole("link", { name: "projects/professional/migration.md" });
+    await expect(link).toBeVisible();
+    await link.click();
+
+    await expect(page).toHaveURL("/projects/professional/migration");
+    await expect(page.getByRole("main")).toContainText("migration");
+  });
+
+  test("an invented path is not a link", async ({ page }) => {
+    await mockChat(page, "See projects/kubernetes.md for that.");
+    await openTerminal(page);
+    await run(page, "/ai");
+    await run(page, "kubernetes?");
+
+    await expect(term(page).getByText("See projects/kubernetes.md for that.")).toBeVisible();
+    await expect(term(page).getByRole("link", { name: /kubernetes/ })).toHaveCount(0);
+  });
+
+  test("command output is never linkified", async ({ page }) => {
+    // `cat` prints file text verbatim; turning paths inside it into links would
+    // change long-standing shell behavior that other specs depend on.
+    await openTerminal(page);
+    await run(page, "cat README.md");
+    await expect(term(page).getByRole("link")).toHaveCount(0);
+  });
+});
