@@ -22,8 +22,17 @@ const TONE: Record<NonNullable<OutputLine["tone"]>, string> = {
 const LINE = "whitespace-pre-wrap min-h-[1lh]";
 
 export function TerminalPanel() {
-  const { terminalOpen, setTerminalOpen, cwd, entries, history, submit, completeInput, focusRequest } =
-    useCommandSurface();
+  const {
+    terminalOpen,
+    setTerminalOpen,
+    cwd,
+    mode,
+    entries,
+    history,
+    submit,
+    completeInput,
+    focusRequest,
+  } = useCommandSurface();
   const [input, setInput] = useState("");
   const [cursor, setCursor] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
@@ -151,7 +160,7 @@ export function TerminalPanel() {
           }}
         >
           <span className="shrink-0 text-cyan" aria-hidden="true">
-            {displayPath(cwd)} ❯
+            {mode === "ai" ? "ai" : displayPath(cwd)} ❯
           </span>
           <input
             ref={inputRef}
@@ -161,7 +170,7 @@ export function TerminalPanel() {
             // The cwd is otherwise invisible to assistive tech: the prompt span above is
             // aria-hidden (it's a visual glyph, `❯`, not meant to be read), and a static label
             // would give a screen-reader user no signal that `cd` changed the working directory.
-            aria-label={`Terminal input (${displayPath(cwd)})`}
+            aria-label={mode === "ai" ? "Chat input" : `Terminal input (${displayPath(cwd)})`}
             autoComplete="off"
             spellCheck={false}
             className="min-w-0 flex-1 bg-transparent text-fg"

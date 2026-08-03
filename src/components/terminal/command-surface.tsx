@@ -16,6 +16,7 @@ type Surface = {
   paletteOpen: boolean;
   setPaletteOpen: (open: boolean) => void;
   cwd: string;
+  mode: "shell" | "ai";
   entries: Entry[];
   history: string[];
   submit: (input: string) => Promise<void>;
@@ -61,6 +62,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [cwd, setCwd] = useState("");
+  const [mode, setMode] = useState<"shell" | "ai">("shell");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [history, setHistory] = useState<string[]>([]);
   const [focusRequest, setFocusRequest] = useState(0);
@@ -90,7 +92,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
 
   const submit = useCallback(
     async (input: string) => {
-      const prompt = `${displayPath(cwd)} ❯ ${input}`;
+      const prompt = `${mode === "ai" ? "ai" : displayPath(cwd)} ❯ ${input}`;
       if (input.trim() !== "") setHistory((past) => [...past, input]);
 
       // cat and grep await ctx.readFile/ctx.grep with no try/catch of their own,
@@ -102,6 +104,22 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
 
         if (result.kind === "clear") {
           setEntries([]);
+          return;
+        }
+
+        if (result.kind === "mode") {
+          setMode(result.mode);
+          setEntries((past) => [
+            ...past,
+            {
+              id: nextId.current++,
+              prompt,
+              lines:
+                result.mode === "ai"
+                  ? [{ text: "▸ chat mode — ask about this site. `exit` to return.", tone: "dim" }]
+                  : [],
+            },
+          ]);
           return;
         }
 
@@ -128,7 +146,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
         ]);
       }
     },
-    [ctx, cwd, router],
+    [ctx, cwd, mode, router],
   );
 
   // The one dispatch path for "open the terminal and run this line". Its three callers — the `?`
@@ -211,6 +229,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       paletteOpen,
       setPaletteOpen,
       cwd,
+      mode,
       entries,
       history,
       submit,
@@ -222,6 +241,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
       terminalOpen,
       paletteOpen,
       cwd,
+      mode,
       entries,
       history,
       submit,
