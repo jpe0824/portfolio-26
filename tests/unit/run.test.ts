@@ -254,13 +254,22 @@ describe("slash commands", () => {
     expect(slash).toEqual(plain);
   });
 
-  it("/ai reports that it is not connected", async () => {
-    expect(text(await runCommand("/ai", ctx()))).toEqual(["▸ not connected — phase 2b"]);
+  it("/ai enters chat mode", async () => {
+    expect(await runCommand("/ai", ctx())).toEqual({ kind: "mode", mode: "ai" });
   });
 
-  it("/ai output carries dim tone", async () => {
-    expect(lines(await runCommand("/ai", ctx()))).toEqual([
-      { text: "▸ not connected — phase 2b", tone: "dim" },
-    ]);
+  it("exit returns to the shell", async () => {
+    expect(await runCommand("exit", ctx())).toEqual({ kind: "mode", mode: "shell" });
+  });
+
+  it("exit is a listed command so help documents the way out", () => {
+    // A mode with no discoverable exit is a trap. `help` is generated from the
+    // registry, so registering `exit` is what makes it documented.
+    expect(commands.map((c) => c.name)).toContain("exit");
+  });
+
+  it("unknown input no longer advertises phase 2b", () => {
+    expect(UNKNOWN_INPUT).not.toContain("phase 2b");
+    expect(UNKNOWN_INPUT).toContain("/ai");
   });
 });

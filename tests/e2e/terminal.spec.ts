@@ -235,10 +235,10 @@ test("arrow up recalls the previous command", async ({ page }) => {
   await expect(input).toHaveValue("pwd");
 });
 
-test("unrecognized input points at the model stub", async ({ page }) => {
+test("unrecognized input points at chat mode", async ({ page }) => {
   await openTerminal(page);
   await run(page, "tell me about your homelab");
-  await expect(term(page).getByText(/phase 2b will route this to the model/)).toBeVisible();
+  await expect(term(page).getByText(/type \/ai to ask a question/)).toBeVisible();
 });
 
 test.describe("phone viewport", () => {

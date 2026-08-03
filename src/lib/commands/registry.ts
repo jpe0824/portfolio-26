@@ -4,7 +4,7 @@ import { resolveArg, resolvePath } from "./resolve-path";
 import { rendererFor } from "@/lib/renderer-map";
 import type { CommandContext, CommandResult, OutputLine } from "./types";
 
-export const UNKNOWN_INPUT = "▸ not a command. phase 2b will route this to the model.";
+export const UNKNOWN_INPUT = "▸ not a command. type /ai to ask a question.";
 
 export type Command = {
   name: string;
@@ -157,9 +157,16 @@ export const commands: Command[] = [
   })),
   {
     name: "/ai",
-    summary: "chat with the model",
+    summary: "ask a question about this site",
     run(): CommandResult {
-      return out({ text: "▸ not connected — phase 2b", tone: "dim" });
+      return { kind: "mode", mode: "ai" };
+    },
+  },
+  {
+    name: "exit",
+    summary: "leave chat mode",
+    run(): CommandResult {
+      return { kind: "mode", mode: "shell" };
     },
   },
 ];

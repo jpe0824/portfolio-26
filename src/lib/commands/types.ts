@@ -11,6 +11,7 @@ export type CommandResult =
   | { kind: "output"; lines: OutputLine[] }
   | { kind: "navigate"; path: string }
   | { kind: "cwd"; cwd: string }
+  | { kind: "mode"; mode: "shell" | "ai" }
   | { kind: "clear" };
 
 export type CommandContext = {
