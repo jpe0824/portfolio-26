@@ -176,6 +176,65 @@ test("a concurrent follow-up does not drop the first exchange from later history
   expect(thirdRequestContents).toContain("second answer");
 });
 
+test("a 503 from an unconfigured deployment degrades gracefully", async ({ page }) => {
+  await mockChat(page, "no model configured", 503);
+  await openTerminal(page);
+  await run(page, "/ai");
+  await run(page, "what is his stack?");
+
+  await expect(term(page).getByText(/the model is resting/)).toBeVisible();
+  // The site is not broken — the terminal still works after a failed answer.
+  await run(page, "exit");
+  await run(page, "ls");
+  await expect(term(page).getByText("whoami.md", { exact: true }).last()).toBeVisible();
+});
+
+test("a 429 degrades with the same line", async ({ page }) => {
+  await mockChat(page, "slow down", 429);
+  await openTerminal(page);
+  await run(page, "/ai");
+  await run(page, "hello");
+  await expect(term(page).getByText(/the model is resting/)).toBeVisible();
+});
+
+test("a dropped connection degrades instead of hanging", async ({ page }) => {
+  await page.route("**/api/chat", (route) => route.abort("failed"));
+  await openTerminal(page);
+  await run(page, "/ai");
+  await run(page, "hello");
+  await expect(term(page).getByText(/unreachable/)).toBeVisible();
+});
+
+test("the live deployment answers or degrades, but never hangs", async ({ page }) => {
+  // No route mock: this exercises the real /api/chat against whatever keys the environment
+  // has. With none set (CI, a fresh clone) it returns 503 and the client renders the degraded
+  // line; with keys set it streams a real answer. Either is a pass — only a hang, or silence,
+  // is not.
+  await openTerminal(page);
+  await run(page, "/ai");
+  await run(page, "what does he work on?");
+
+  const log = term(page).getByRole("log");
+  // aria-busy flips from "true" to "false" only when askModel's settle() runs, and settle()
+  // is the one call reached by every branch of the ladder (streamed success, non-OK response,
+  // thrown error). A hung request leaves it "true" forever, so waiting on this — rather than
+  // on any particular text — is what actually proves "never hangs" instead of just "eventually
+  // shows something".
+  await expect(log).toHaveAttribute("aria-busy", "false", { timeout: 30_000 });
+
+  // Scope to this exchange's own entry, and within it to the answer paragraph specifically —
+  // not to the log region as a whole, and not to the entry's echoed prompt line. The prompt
+  // ("ai ❯ what does he work on?") is written synchronously before the request is even sent
+  // and is always non-empty, so asserting non-emptiness against the whole entry (or the whole
+  // log) would pass whether or not the request ever returned. Only the answer paragraph is
+  // populated by settle(), and settle() never writes an empty lines array on any branch, so a
+  // non-empty answer paragraph is only reachable once the request has actually concluded.
+  const entry = log.locator("> div").last();
+  await expect(entry).toContainText("ai ❯ what does he work on?");
+  const answerLine = entry.locator("p").last();
+  await expect(answerLine).not.toBeEmpty();
+});
+
 test.describe("citations", () => {
   // Desktop viewport: this navigates and then asserts against the content pane, and the
   // assertions below are scoped to <main> rather than the page precisely because the explorer
