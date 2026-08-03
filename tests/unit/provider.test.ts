@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GENERATION, resolveModels } from "@/lib/ai/provider";
 
-const ids = (env: NodeJS.ProcessEnv) => resolveModels(env).map((candidate) => candidate.id);
+const ids = (env: Record<string, string | undefined>) => resolveModels(env).map((candidate) => candidate.id);
 
 describe("resolveModels", () => {
   it("prefers google, then groq, when both keys are present", () => {

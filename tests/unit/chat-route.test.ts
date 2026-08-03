@@ -24,10 +24,21 @@ function fakeStream(chunks: string[]) {
   };
 }
 
+// A distinct x-forwarded-for per call keeps every test on its own rate-limit bucket, so the
+// module-level limiter in the route (shared across this whole file's single dynamic import)
+// can never make one test's request count toward another's — no matter how many more tests
+// are added later.
+let requestCount = 0;
+
 function post(body: unknown, origin = "http://localhost:3211") {
+  requestCount += 1;
   return new Request("http://localhost:3211/api/chat", {
     method: "POST",
-    headers: { "content-type": "application/json", origin },
+    headers: {
+      "content-type": "application/json",
+      origin,
+      "x-forwarded-for": `10.0.0.${requestCount}`,
+    },
     body: JSON.stringify(body),
   });
 }
@@ -96,10 +107,35 @@ describe("POST /api/chat", () => {
     expect(streamText).not.toHaveBeenCalled();
   });
 
+  it("treats an unparseable Origin as cross-origin", async () => {
+    // Browsers send the literal string "null" for sandboxed iframes, data: URLs, and some
+    // cross-origin redirects. `new URL("null")` throws; that must still land on 403, not a
+    // 500 from an uncaught exception.
+    const response = await POST(post(ask("hi"), "null"));
+    expect(response.status).toBe(403);
+    expect(streamText).not.toHaveBeenCalled();
+  });
+
   it("rejects a question over the character cap", async () => {
     const response = await POST(post(ask("x".repeat(MAX_QUESTION_CHARS + 1))));
     expect(response.status).toBe(400);
     expect(streamText).not.toHaveBeenCalled();
+  });
+
+  it("does not reject a long assistant message in history", async () => {
+    // GENERATION.maxOutputTokens allows assistant replies well past 500 characters, and the
+    // wire contract accepts assistant history entries. This is the regression the newest-
+    // message-only length check exists to prevent: a long answer must not 400 the next question.
+    const response = await POST(
+      post({
+        messages: [
+          { role: "user", content: "tell me about his stack" },
+          { role: "assistant", content: "x".repeat(MAX_QUESTION_CHARS + 200) },
+          { role: "user", content: "and what else?" },
+        ],
+      }),
+    );
+    expect(response.status).toBe(200);
   });
 
   it("rejects a malformed body", async () => {

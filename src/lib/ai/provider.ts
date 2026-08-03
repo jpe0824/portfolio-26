@@ -27,7 +27,10 @@ export type Candidate = { id: "google" | "groq"; model: LanguageModel };
  * result, not an error: the route turns it into a "not configured" line so the build succeeds
  * and the suite passes green with zero secrets.
  */
-export function resolveModels(env: NodeJS.ProcessEnv = process.env): Candidate[] {
+// `NodeJS.ProcessEnv` (via Next.js's global augmentation) requires `NODE_ENV`, which this
+// function never reads. A structural type of exactly what's used keeps `process.env` a valid
+// default while letting callers (tests included) pass a bare two-key object.
+export function resolveModels(env: Record<string, string | undefined> = process.env): Candidate[] {
   const candidates: Candidate[] = [];
 
   const googleKey = env.GOOGLE_GENERATIVE_AI_API_KEY;

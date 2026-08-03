@@ -52,6 +52,20 @@ function text(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
+/**
+ * `Origin` is browser-controlled but not guaranteed to be a well-formed absolute URL:
+ * sandboxed iframes, `data:` URLs, and some cross-origin redirects send the literal string
+ * "null". `new URL` throws on that, and failing open here (letting an unparseable value
+ * through) would defeat the point of the check, so an unparseable origin counts as cross-origin.
+ */
+function isCrossOrigin(origin: string, requestUrl: string): boolean {
+  try {
+    return new URL(origin).host !== new URL(requestUrl).host;
+  } catch {
+    return true;
+  }
+}
+
 function parse(body: unknown): ChatMessage[] | null {
   if (typeof body !== "object" || body === null) return null;
   const { messages } = body as { messages?: unknown };
@@ -63,9 +77,14 @@ function parse(body: unknown): ChatMessage[] | null {
     const { role, content } = message as { role?: unknown; content?: unknown };
     if (role !== "user" && role !== "assistant") return null;
     if (typeof content !== "string") return null;
-    if (content.length > MAX_QUESTION_CHARS) return null;
     parsed.push({ role, content });
   }
+
+  // Only the newest message is length-checked. GENERATION.maxOutputTokens allows assistant
+  // replies well past 500 characters, and old user turns were already validated when they
+  // were first sent — capping every message here would make a second question in the same
+  // conversation 400 as soon as any prior answer ran long.
+  if (parsed[parsed.length - 1].content.length > MAX_QUESTION_CHARS) return null;
 
   // Truncation rather than rejection: a long conversation is legitimate, it just does not all
   // need to be sent. slice(-N) keeps the most recent turn, which is the actual question.
@@ -92,7 +111,7 @@ export async function POST(request: Request): Promise<Response> {
   // Same-origin only. Cheap deterrent against casual direct use of the endpoint; not a security
   // boundary, since Origin is trivially forged outside a browser.
   const origin = request.headers.get("origin");
-  if (origin && new URL(origin).host !== new URL(request.url).host) {
+  if (origin && isCrossOrigin(origin, request.url)) {
     return text("cross-origin requests are not accepted", 403);
   }
 
