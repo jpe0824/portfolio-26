@@ -10,7 +10,9 @@
  * Word boundaries are load-bearing rather than incidental: they are the entire reason a URL
  * such as `linkedin.com/in/jasonedman/` survives untouched. There is no boundary between
  * `jason` and `edman` inside that slug, so the pattern cannot match it, and no URL special
- * case is needed anywhere in this file.
+ * case is needed anywhere in this file. The same reasoning protects the site's own domain,
+ * `jsonedman.dev`: it contains the literal substring "edman", but nothing but a word character
+ * (`n`, from "json") precedes it, so the bare-surname alternative below cannot start there either.
  */
 
 /**
@@ -20,7 +22,11 @@
  */
 const APOSTROPHE = "[\\u0027\\u2019]";
 
-const NAME = new RegExp(`\\bJason(?:\\s+Edman)?(?:${APOSTROPHE}s)?\\b`, "gi");
+// The bare surname is its own alternative, not folded into `Jason(?:\s+Edman)?` optionality:
+// a model shortening to the surname on second reference ("Edman built the edge stack") is
+// ordinary usage, not an exotic case, and the full name's own optional-Edman branch only ever
+// fires when "Jason" precedes it.
+const NAME = new RegExp(`\\b(?:Jason(?:\\s+Edman)?|Edman)(?:${APOSTROPHE}s)?\\b`, "gi");
 
 /**
  * How far back to look for a bare prefix of "jason" at the very end of the buffer.
@@ -51,18 +57,16 @@ function shouldCapitalize(offset: number, string: string, precedingChar: string 
   return precedingChar === "" || precedingChar === "." || precedingChar === "\n" || precedingChar === null;
 }
 
-function pronounFor(match: string, offset: number, string: string): string {
-  const possessiveRegex = new RegExp(`${APOSTROPHE}s$`);
-  const possessive = possessiveRegex.test(match);
-  const capitalized = shouldCapitalize(offset, string, null);
-
-  if (possessive) return capitalized ? "His" : "his";
-  return capitalized ? "He" : "he";
-}
-
-/** Replaces every occurrence in a complete string. Use on text that will not grow. */
+/**
+ * Replaces every occurrence in a complete string. Use on text that will not grow.
+ *
+ * Delegates to `createRedactor` rather than keeping a second, parallel implementation: a
+ * complete string is just the one-chunk case of the streaming path (push it, then flush), so
+ * this is that path exercised once instead of a second regex-replace that could drift from it.
+ */
 export function redactText(text: string): string {
-  return text.replace(NAME, pronounFor);
+  const redactor = createRedactor();
+  return redactor.push(text) + redactor.flush();
 }
 
 /**
@@ -78,10 +82,16 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
    * Index at which it is safe to cut: no completed match straddles it, none could start after.
    * Strategy: look for the last occurrence of "jason" in the buffer. If found, check that
    * everything after it is whitespace + optional partial "edman" + optional possessive.
-   * Also check for a bare prefix of "jason" at the very end (up to PREFIX_WINDOW length).
+   * Separately, do the same for the last occurrence of a standalone "edman" — a bare surname
+   * arriving split across chunks (e.g. `"Ed"` then `"man"`) needs its own guard, since it does
+   * not begin with "jason" and so the check above never sees it. Where both fire, the earlier
+   * of the two wins: everything from that point on is what might still be growing.
+   * Also check for a bare prefix of "jason" or "edman" at the very end (up to PREFIX_WINDOW
+   * length), for the case where not even the first full keyword has arrived yet.
    */
   function safeCut(): number {
     const lowerBuffer = buffer.toLowerCase();
+    const pendingCuts: number[] = [];
 
     // Look for the last occurrence of "jason".
     const lastJasonIndex = lowerBuffer.lastIndexOf("jason");
@@ -91,19 +101,32 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
       // Check if it’s all whitespace + optional partial edman + optional possessive.
       // PARTIAL tests "jason" at the start, but we need to test what comes after.
       // Strip the leading "jason" and test the tail: space + optional edman + optional possessive.
-      const tailRegex = new RegExp(`^\\s*(?:e|ed|edm|edma|edman)?${APOSTROPHE}?s?$`, "i");
-      if (tailRegex.test(afterJason)) {
+      const growingTail = new RegExp(`^\\s*(?:e|ed|edm|edma|edman)?${APOSTROPHE}?s?$`, "i");
+      if (growingTail.test(afterJason)) {
         // Safe to cut before "jason".
-        return lastJasonIndex;
+        pendingCuts.push(lastJasonIndex);
       }
     }
 
-    // Also check for a bare prefix of "jason" at the very end of the buffer.
+    // Look for the last occurrence of a standalone "edman", mirroring the check above: nothing
+    // after it but an optional, possibly-partial possessive suffix.
+    const lastEdmanIndex = lowerBuffer.lastIndexOf("edman");
+    if (lastEdmanIndex !== -1) {
+      const afterEdman = buffer.slice(lastEdmanIndex + 5);
+      const growingTail = new RegExp(`^${APOSTROPHE}?s?$`, "i");
+      if (growingTail.test(afterEdman)) {
+        pendingCuts.push(lastEdmanIndex);
+      }
+    }
+
+    if (pendingCuts.length > 0) return Math.min(...pendingCuts);
+
+    // Also check for a bare prefix of "jason" or "edman" at the very end of the buffer.
     const reach = Math.min(buffer.length, PREFIX_WINDOW);
     for (let back = reach; back >= 1; back--) {
-      const tail = buffer.slice(buffer.length - back);
-      if ("jason".startsWith(tail.toLowerCase())) {
-        // Could still be growing into "jason".
+      const tail = buffer.slice(buffer.length - back).toLowerCase();
+      if ("jason".startsWith(tail) || "edman".startsWith(tail)) {
+        // Could still be growing into "jason" or "edman".
         return buffer.length - back;
       }
     }
@@ -115,6 +138,15 @@ export function createRedactor(): { push(chunk: string): string; flush(): string
   function redactWithContext(text: string): string {
     const possessiveRegex = new RegExp(`${APOSTROPHE}s$`);
     return text.replace(NAME, (match: string, offset: number, string: string) => {
+      // `\b` at offset 0 of `text` succeeds whenever the match's first character is a word
+      // character — regardless of what actually preceded `text` in the original stream, which
+      // this isolated call cannot see. `lastChar` is that missing context (the real previous
+      // character, carried over from an earlier push): if it is itself a word character, no
+      // boundary really exists here and the match must be left alone. This is what keeps a
+      // chunk boundary that happens to land right after "json" — stranding "edman.dev" as its
+      // own fragment — from misreading a piece of `jsonedman.dev` as the bare surname.
+      if (offset === 0 && /\w/.test(lastChar)) return match;
+
       const possessive = possessiveRegex.test(match);
       const capitalized = shouldCapitalize(offset, string, lastChar || null);
 

@@ -43,6 +43,38 @@ describe("redactText", () => {
     expect(redactText("Deployed at jsonedman.dev")).toBe("Deployed at jsonedman.dev");
   });
 
+  it("replaces the bare surname on its own", () => {
+    // A model shortening to the surname on second reference ("Edman built the edge stack")
+    // is ordinary usage, not an exotic case — the full name's optional-Edman branch only
+    // ever fires when "Jason" precedes it, so the bare surname needs its own coverage.
+    expect(redactText("Edman built the edge stack.")).toBe("He built the edge stack.");
+  });
+
+  it("lowercases the pronoun for a mid-sentence bare surname", () => {
+    expect(redactText("The site belongs to Edman.")).toBe("The site belongs to he.");
+  });
+
+  it("turns a bare-surname possessive into his", () => {
+    expect(redactText("Edman's homelab runs Proxmox.")).toBe("His homelab runs Proxmox.");
+  });
+
+  it("does not double-redact when the surname follows the full name", () => {
+    expect(redactText("Jason Edman wrote it.")).toBe("He wrote it.");
+  });
+
+  it("leaves the bare surname inside a URL untouched", () => {
+    // Same word-boundary reasoning as the full name above: nothing but a word character
+    // ("n", from "jason") precedes "edman" inside this slug.
+    const url = "https://www.linkedin.com/in/jasonedman/";
+    expect(redactText(url)).toBe(url);
+  });
+
+  it("leaves the bare surname inside the site domain untouched", () => {
+    // "jsonedman.dev" contains the literal substring "edman", preceded only by "n" (from
+    // "json") — a word character, so the standalone-surname alternative cannot start there.
+    expect(redactText("Deployed at jsonedman.dev")).toBe("Deployed at jsonedman.dev");
+  });
+
   it("does not match a longer word that merely starts with the name", () => {
     expect(redactText("Jasonville is a place")).toBe("Jasonville is a place");
   });
@@ -103,6 +135,45 @@ describe("createRedactor", () => {
     const source = "Text with Jason" + " ".repeat(40) + "Edman finished.";
     const expected = "Text with he finished.";
     expect(run([source.slice(0, 20), source.slice(20)])).toBe(expected);
+  });
+
+  it("redacts a bare surname delivered in one chunk", () => {
+    expect(run(["Edman ships things."])).toBe("He ships things.");
+  });
+
+  it("redacts a bare surname split across two chunks", () => {
+    // Mirrors the full-name split above: an unbuffered filter sees "Ed" and "man" separately
+    // and matches neither.
+    expect(run(["The engineer Ed", "man wrote it."])).toBe("The engineer he wrote it.");
+  });
+
+  it("redacts a bare surname split at every possible offset", () => {
+    const source = "The engineer Edman wrote it.";
+    const expected = "The engineer he wrote it.";
+    for (let cut = 0; cut <= source.length; cut++) {
+      expect(run([source.slice(0, cut), source.slice(cut)]), `cut at ${cut}`).toBe(expected);
+    }
+  });
+
+  it("redacts a bare-surname possessive split across a chunk boundary", () => {
+    expect(run(["Edman'", "s stack"])).toBe("His stack");
+  });
+
+  it("leaves jsonedman.dev untouched when the chunk boundary falls right after 'json'", () => {
+    // The dangerous split: a chunk boundary landing exactly between "json" and "edman" strands
+    // "edman" as its own fragment. Without a leading-boundary check in safeCut, the next push
+    // would match it in isolation — `\b` at the start of an isolated string cannot tell that a
+    // word character ("n") actually preceded it in the original text — and wrongly redact a
+    // piece of the site's own domain.
+    const source = "Deployed at jsonedman.dev";
+    const cut = source.indexOf("edman");
+    expect(run([source.slice(0, cut), source.slice(cut)])).toBe(source);
+  });
+
+  it("leaves the linkedin slug untouched when the chunk boundary falls right after 'json'", () => {
+    const source = "https://www.linkedin.com/in/jasonedman/";
+    const cut = source.indexOf("edman");
+    expect(run([source.slice(0, cut), source.slice(cut)])).toBe(source);
   });
 
   it("reproduces the input exactly when nothing matches, across many chunks", () => {
