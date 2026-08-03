@@ -27,7 +27,13 @@ type Surface = {
   mode: "shell" | "ai";
   entries: Entry[];
   history: string[];
-  submit: (input: string) => Promise<void>;
+  /**
+   * `dispatch: "shell"` forces `input` to run through the command registry even in chat mode.
+   * Threaded as a parameter rather than a `setMode("shell")` call before `submit`: a state
+   * update does not reach the closure this call already captured in the same tick, so the
+   * dispatch would still take the chat path — see `runInTerminal`, the one caller that needs it.
+   */
+  submit: (input: string, dispatch?: "auto" | "shell") => Promise<void>;
   completeInput: (input: string) => string;
   /** Open the terminal, run `line` in it, and put focus on the terminal input. */
   runInTerminal: (line: string) => void;
@@ -159,13 +165,18 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
   );
 
   const submit = useCallback(
-    async (input: string) => {
+    async (input: string, dispatch: "auto" | "shell" = "auto") => {
       const prompt = `${mode === "ai" ? "ai" : displayPath(cwd)} ❯ ${input}`;
       if (input.trim() !== "") setHistory((past) => [...past, input]);
 
       // In chat mode only `exit` and `clear` are intercepted; everything else is a question.
       // Without this, a visitor asking "what does ls do?" would get a directory listing.
-      if (mode === "ai") {
+      // `dispatch === "shell"` bypasses this entirely: runInTerminal's three callers (the
+      // palette's command items, the empty-state shortcut row, the `?` chord) always mean "run
+      // this command," never "ask this question" — even while chat mode is active. Without the
+      // bypass, opening the palette in chat mode and choosing `tree` would ask the model the
+      // literal string "tree" instead of listing the content tree.
+      if (dispatch === "auto" && mode === "ai") {
         const word = input.trim();
         if (word !== "exit" && word !== "clear") {
           if (word === "") return;
@@ -240,7 +251,7 @@ export function CommandSurface({ children }: { children: React.ReactNode }) {
     (line: string) => {
       setTerminalOpen(true);
       setFocusRequest((n) => n + 1);
-      void submit(line);
+      void submit(line, "shell");
     },
     [submit],
   );

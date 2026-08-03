@@ -1,6 +1,25 @@
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const term = (page: Page) => page.getByRole("region", { name: "Terminal" });
+
+const PROVIDER_KEYS = ["GOOGLE_GENERATIVE_AI_API_KEY", "GROQ_API_KEY"];
+
+/**
+ * `next start` (the webServer this config spawns) loads `.env.local` into its own process via
+ * Next's env loader — this spec's Node process never sees that file, so checking
+ * `process.env` alone would miss a key placed there for local provider testing. Reading the
+ * file directly is the only way to detect one before a test fires a real generation against it.
+ */
+function hasProviderKeyConfigured(): boolean {
+  if (PROVIDER_KEYS.some((key) => !!process.env[key])) return true;
+
+  const envPath = path.join(__dirname, "..", "..", ".env.local");
+  if (!existsSync(envPath)) return false;
+  const contents = readFileSync(envPath, "utf8");
+  return PROVIDER_KEYS.some((key) => new RegExp(`^${key}=\\S+`, "m").test(contents));
+}
 
 async function openTerminal(page: Page) {
   await page.goto("/");
@@ -106,6 +125,37 @@ test("chat mode does not run shell commands", async ({ page }) => {
   await expect(term(page).getByText("whoami.md", { exact: true })).toHaveCount(0);
 });
 
+test("invoking a command through the palette runs the command, not a chat question", async ({ page }) => {
+  // runInTerminal (the palette's command items, the empty-state shortcut row, the `?` chord)
+  // always means "run this command" — even while chat mode is active. Without that, opening
+  // ⌘K in chat mode and choosing `tree` would POST the literal string "tree" to /api/chat
+  // instead of listing the content tree. Throwing inside the handler is the strongest form of
+  // "must not be called": it fails the test outright the instant the route is hit, rather than
+  // trusting a flag checked only after the fact.
+  await page.route("**/api/chat", async () => {
+    throw new Error("chat mode must not ask the model when a palette command runs a shell command");
+  });
+
+  await openTerminal(page);
+  await run(page, "/ai");
+  await expect(term(page).getByLabel("Chat input", { exact: true })).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+k");
+  const dialog = page.getByRole("dialog", { name: "Command palette", exact: true });
+  await expect(dialog).toBeVisible();
+  const paletteInput = dialog.getByLabel("Command palette input", { exact: true });
+  await paletteInput.fill("tree");
+  await paletteInput.press("Enter");
+
+  await expect(dialog).toBeHidden();
+  // Real `tree` output, not a chat answer: whoami.md is a root-level file the tree command
+  // prints, and chat answers never contain literal manifest filenames unless the model cites
+  // them (mockChat is never wired up here, so nothing could have produced this line but tree).
+  await expect(term(page).getByText("whoami.md", { exact: true })).toBeVisible();
+  // Still in chat mode: the palette dispatch ran a command without leaving the mode.
+  await expect(term(page).getByLabel("Chat input", { exact: true })).toBeVisible();
+});
+
 test("clear still works inside chat mode", async ({ page }) => {
   await mockChat(page, "an answer");
   await openTerminal(page);
@@ -207,9 +257,11 @@ test("a dropped connection degrades instead of hanging", async ({ page }) => {
 
 test("the live deployment answers or degrades, but never hangs", async ({ page }) => {
   // No route mock: this exercises the real /api/chat against whatever keys the environment
-  // has. With none set (CI, a fresh clone) it returns 503 and the client renders the degraded
-  // line; with keys set it streams a real answer. Either is a pass — only a hang, or silence,
-  // is not.
+  // has. That is the point with none configured (CI, a fresh clone) — 503, degrading
+  // gracefully — but the moment a real key is configured locally, this would fire an actual
+  // provider generation on every `pnpm test:e2e` run, which no test in this suite may do.
+  test.skip(hasProviderKeyConfigured(), "would call a real provider now that a key is configured");
+
   await openTerminal(page);
   await run(page, "/ai");
   await run(page, "what does he work on?");
@@ -235,19 +287,21 @@ test("the live deployment answers or degrades, but never hangs", async ({ page }
   await expect(answerLine).not.toBeEmpty();
 });
 
+// No describe-level test.use({ viewport }): <main> — what every assertion below reads —
+// renders identically at both breakpoints; only the explorer sidebar's visibility is
+// viewport-gated (terminal-frame.tsx), and none of these tests touch the sidebar. Pinning a
+// desktop size here would silently drop the mobile project's coverage of all three tests for no
+// real benefit, exactly the trap CLAUDE.md's testing section warns about.
 test.describe("citations", () => {
-  // Desktop viewport: this navigates and then asserts against the content pane, and the
-  // assertions below are scoped to <main> rather than the page precisely because the explorer
-  // auto-expands to the current path and would match the same filename in the sidebar.
-  test.use({ viewport: { width: 1440, height: 900 } });
-
   test("a cited path opens the file in the editor pane", async ({ page }) => {
     await mockChat(page, "That work is in projects/professional/migration.md today.");
     await openTerminal(page);
     await run(page, "/ai");
     await run(page, "where is the migration work?");
 
-    const link = term(page).getByRole("link", { name: "projects/professional/migration.md" });
+    // exact: true — getByRole name matching is substring by default, and the whole prompt
+    // line could otherwise satisfy a substring match against a longer accessible name.
+    const link = term(page).getByRole("link", { name: "projects/professional/migration.md", exact: true });
     await expect(link).toBeVisible();
     await link.click();
 

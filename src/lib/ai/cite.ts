@@ -17,7 +17,13 @@ export type Segment = { text: string; href?: string };
  */
 export function citeSegments(line: string, nodes: ContentNode[]): Segment[] {
   // Longest first, so a nested path wins over any shorter path sharing its start offset.
-  const files = allFiles(nodes).sort((a, b) => b.source.length - a.source.length);
+  // The zero-length filter guards against an infinite loop: `line.indexOf("", cursor)` matches
+  // at `cursor` itself, so `cursor` would never advance and the while loop below would spin
+  // forever. Unreachable with today's static manifest (every entry has a real `source`), but
+  // cheap insurance against a future manifest bug hanging the tab.
+  const files = allFiles(nodes)
+    .filter((file) => file.source.length > 0)
+    .sort((a, b) => b.source.length - a.source.length);
 
   const segments: Segment[] = [];
   let cursor = 0;
